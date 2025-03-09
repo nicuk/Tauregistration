@@ -209,33 +209,39 @@ export async function POST(request: Request) {
           
           if (isPiUser) {
             try {
-              // Get current count of pioneers
-              const { data: statsData } = await supabaseAdmin
-                .from("pioneer_stats_table")
-                .select("total_pioneers")
-                .eq("id", 1)
-                .single();
+              // Get the current count of pioneers directly from the profiles table
+              const { count: pioneerCount, error: countError } = await supabaseAdmin
+                .from("profiles")
+                .select("*", { count: "exact", head: true })
+                .eq("is_pi_user", true);
                 
-              const currentCount = (statsData?.total_pioneers || 0) + 1;
-              nextPioneerNumber = currentCount;
-              isGenesisPioneer = currentCount <= 10000;
-              
-              // Update the pioneer stats
-              await supabaseAdmin
-                .from("pioneer_stats_table")
-                .update({
-                  total_pioneers: currentCount,
-                  genesis_pioneers: isGenesisPioneer ? supabase.sql`genesis_pioneers + 1` : supabase.sql`genesis_pioneers`,
-                  updated_at: new Date().toISOString()
-                })
-                .eq("id", 1);
+              if (countError) {
+                console.error("Error counting pioneers:", countError);
+              } else {
+                const currentCount = (pioneerCount || 0) + 1;
+                nextPioneerNumber = currentCount;
+                isGenesisPioneer = currentCount <= 10000;
+                console.log(`Calculated pioneer number: ${nextPioneerNumber}, isGenesisPioneer: ${isGenesisPioneer}`);
+              }
             } catch (statsError) {
-              console.error("Error getting/updating pioneer stats:", statsError);
+              console.error("Error getting pioneer stats:", statsError);
               // Continue with registration even if stats update fails
             }
           }
           
           // Insert the profile
+          console.log("Inserting profile with data:", {
+            id: userId,
+            username: finalUsername,
+            is_pi_user: isPiUser,
+            pioneer_number: nextPioneerNumber,
+            is_genesis_pioneer: isGenesisPioneer,
+            referral_code: generateUniqueReferralCode(finalUsername),
+            email: email,
+            country: country,
+            referral_source: referralSource || null
+          });
+          
           const { error: insertError } = await supabaseAdmin
             .from("profiles")
             .insert({
