@@ -393,58 +393,70 @@ export async function POST(request: Request) {
                   } else if (!existingReferral || existingReferral.length === 0) {
                     // Only create the referral if it doesn't already exist
                     try {
-                      const { error: createReferralError } = await supabaseAdmin
-                        .from("referrals")
-                        .insert({
-                          referrer_id: referrerData.id,
-                          referred_id: userId
-                        })
+                      // First update the referred_by field in the user's profile
+                      try {
+                        const referrerIdString = referrerData.id.toString();
+                        console.log(`Updating referred_by field with string value: ${referrerIdString}`);
+                        
+                        const { error: updateReferredByError } = await supabaseAdmin
+                          .from("profiles")
+                          .update({ referred_by: referrerIdString })
+                          .eq("id", userId);
 
-                      if (createReferralError) {
-                        console.error("Error creating referral record:", createReferralError)
-                        // Continue with registration even if referral creation fails
-                      } else {
-                        // Update the referred_by column in the user's profile
-                        try {
-                          const { error: updateReferredByError } = await supabaseAdmin
-                            .from("profiles")
-                            .update({ referred_by: referrerData.id.toString() })
-                            .eq("id", userId)
+                        if (updateReferredByError) {
+                          console.error("Error updating referred_by field:", updateReferredByError);
+                          console.error("Error code:", updateReferredByError.code);
+                          console.error("Error message:", updateReferredByError.message);
+                          console.error("Error details:", updateReferredByError.details);
+                          // Continue with registration even if updating referred_by fails
+                        } else {
+                          console.log(`Successfully updated referred_by field for user ${userId} to referrer ${referrerIdString}`);
+                          
+                          // Only create the referral record if the referred_by update was successful
+                          const { error: createReferralError } = await supabaseAdmin
+                            .from("referrals")
+                            .insert({
+                              referrer_id: referrerData.id,
+                              referred_id: userId
+                            });
 
-                          if (updateReferredByError) {
-                            console.error("Error updating referred_by field:", updateReferredByError)
+                          if (createReferralError) {
+                            console.error("Error creating referral record:", createReferralError);
+                            // Continue with registration even if referral creation fails
                           } else {
-                            console.log(`Successfully updated referred_by field for user ${userId} to referrer ${referrerData.id}`)
-                          }
-                        } catch (updateError) {
-                          console.error("Exception updating referred_by field:", updateError)
-                        }
+                            console.log("Successfully created referral record");
+                            
+                            // Only update the referrer's count if the referral was successfully created
+                            try {
+                              const newReferralCount = (referrerData.total_referrals || 0) + 1;
+                              const { error: updateReferrerError } = await supabaseAdmin
+                                .from("profiles")
+                                .update({ total_referrals: newReferralCount })
+                                .eq("id", referrerData.id);
 
-                        // Only update the referrer's count if the referral was successfully created
-                        try {
-                          const newReferralCount = (referrerData.total_referrals || 0) + 1
-                          const { error: updateReferrerError } = await supabaseAdmin
-                            .from("profiles")
-                            .update({ total_referrals: newReferralCount })
-                            .eq("id", referrerData.id)
-
-                          if (updateReferrerError) {
-                            console.error("Error updating referrer stats:", updateReferrerError)
+                              if (updateReferrerError) {
+                                console.error("Error updating referrer stats:", updateReferrerError);
+                              } else {
+                                console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                              }
+                            } catch (updateError) {
+                              console.error("Exception updating referrer stats:", updateError);
+                            }
                           }
-                        } catch (updateError) {
-                          console.error("Exception updating referrer stats:", updateError)
                         }
+                      } catch (updateError) {
+                        console.error("Exception updating referred_by field:", updateError);
                       }
                     } catch (insertError) {
-                      console.error("Exception creating referral record:", insertError)
+                      console.error("Exception creating referral record:", insertError);
                     }
                   } else {
-                    console.log("Referral already exists, skipping creation")
+                    console.log("Referral already exists, skipping creation");
                   }
                 }
               }
             } catch (referralError) {
-              console.error("Error processing referral:", referralError)
+              console.error("Error processing referral:", referralError);
               // Non-blocking error - continue with registration
             }
           }
