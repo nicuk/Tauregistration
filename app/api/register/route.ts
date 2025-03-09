@@ -397,8 +397,7 @@ export async function POST(request: Request) {
                         .from("referrals")
                         .insert({
                           referrer_id: referrerData.id,
-                          referred_id: userId,
-                          status: "completed"
+                          referred_id: userId
                         })
 
                       if (createReferralError) {
