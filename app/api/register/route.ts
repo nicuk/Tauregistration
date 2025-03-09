@@ -325,16 +325,35 @@ export async function POST(request: Request) {
           // Step 5: Handle referral if provided
           if (referralCode) {
             try {
+              console.log(`Processing referral code: ${referralCode}`);
+              
               // First check if the referral code is valid
               const { data: referrerData, error: referrerError } = await supabaseAdmin
                 .from("profiles")
                 .select("id, total_referrals")
                 .eq("referral_code", referralCode)
-                .single()
+                .single();
 
               if (referrerError) {
-                console.error("Error finding referrer:", referrerError)
-                // Continue with registration even if referrer lookup fails
+                console.error("Error finding referrer:", referrerError);
+                console.log(`Invalid referral code provided: ${referralCode}. Continuing with registration without referral.`);
+                
+                // Try case-insensitive match as a fallback
+                try {
+                  const { data: caseInsensitiveMatch } = await supabaseAdmin
+                    .from("profiles")
+                    .select("id, total_referrals, referral_code")
+                    .ilike("referral_code", referralCode)
+                    .limit(1);
+                    
+                  if (caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
+                    console.log(`Found case-insensitive match for referral code: ${caseInsensitiveMatch[0].referral_code}`);
+                  } else {
+                    console.log("No case-insensitive match found either");
+                  }
+                } catch (fallbackError) {
+                  console.error("Error in fallback referral code lookup:", fallbackError);
+                }
               } else if (referrerData) {
                 // Prevent self-referrals
                 if (referrerData.id === userId) {
