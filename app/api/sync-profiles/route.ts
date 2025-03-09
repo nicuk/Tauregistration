@@ -67,7 +67,6 @@ export async function POST() {
         referral_source: metadata.referral_source || null,
         referred_by: metadata.referred_by || null,
         referral_code: metadata.referral_code || null,
-        registration_number: String(pioneerNumber),
         pioneer_number: pioneerNumber,
         is_genesis_pioneer: isGenesisPioneer,
         email: authUser.email,
@@ -125,4 +124,3 @@ export async function POST() {
     message: `Created ${created.length} profiles, encountered ${errors.length} errors`,
   })
 }
-

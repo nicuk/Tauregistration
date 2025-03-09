@@ -120,10 +120,10 @@ export async function POST(request: Request) {
     }
 
     // Calculate the pioneer number (1-based index)
-    const pioneerNumber = (pioneerCount || 0) + 1
+    const pioneerNumber: number = (pioneerCount || 0) + 1
 
     // Determine if this is a genesis pioneer (first 10,000 users)
-    const isGenesisPioneer = pioneerNumber <= 10000
+    const isGenesisPioneer: boolean = pioneerNumber <= 10000
 
     // Step 3: Create the user in Auth
     try {
@@ -197,52 +197,79 @@ export async function POST(request: Request) {
 
       // Step 4: Create the user profile
       try {
-        console.log("Calling create_user_profile_safe with params:", {
-          user_id: userId,
-          user_username: finalUsername,
-          user_is_pi: isPiUser,
-          user_reg_number: `TAU-${String(Math.floor(Math.random() * 10000)).padStart(8, '0')}`,
-          user_pioneer_number: isPiUser ? Math.floor(Math.random() * 10000) : null,
-          user_is_genesis: isPiUser && Math.random() < 0.1
-        })
-
-        // Use the SQL function to create the profile in a transaction-safe way
-        const { data: profileData, error: profileError } = await supabaseAdmin
-          .rpc('create_user_profile_safe', {
-            user_id: userId,
-            user_username: finalUsername,
-            user_is_pi: isPiUser,
-            user_reg_number: `TAU-${String(Math.floor(Math.random() * 10000)).padStart(8, '0')}`,
-            user_pioneer_number: isPiUser ? Math.floor(Math.random() * 10000) : null,
-            user_is_genesis: isPiUser && Math.random() < 0.1
-          })
-
-        if (profileError) {
-          console.error("Error creating profile:", profileError)
-          
-          // Log more detailed error information for debugging
-          console.error("Profile creation error details:", JSON.stringify(profileError, null, 2))
+        console.log("Creating user profile with pioneer number:", pioneerNumber);
+        
+        // Try direct insert first as it's been confirmed to work correctly
+        try {
+          console.log("Attempting direct insert to profiles table");
+          const { error: insertError } = await supabaseAdmin
+            .from("profiles")
+            .insert({
+              id: userId,
+              username: finalUsername,
+              is_pi_user: isPiUser,
+              pioneer_number: pioneerNumber,
+              is_genesis_pioneer: isGenesisPioneer,
+              referral_code: generateUniqueReferralCode(finalUsername),
+              email: email,
+              country: country,
+              referral_source: referralSource || null,
+              total_referrals: 0
+            });
+            
+          if (insertError) {
+            console.error("Direct insert failed:", insertError);
+            
+            // Try RPC as fallback with the CORRECT function name
+            console.log("Direct insert failed, trying RPC as fallback");
+            const { data, error: profileError } = await supabaseAdmin
+              .rpc('create_user_profile_safe', {  
+                user_id: userId,
+                user_username: finalUsername,
+                user_is_pi: isPiUser,
+                user_pioneer_number: pioneerNumber,
+                user_is_genesis: isGenesisPioneer
+              });
+              
+            if (profileError) {
+              console.error("RPC also failed:", profileError);
+              console.error("Profile creation error details:", JSON.stringify(profileError, null, 2));
+              
+              // If profile creation fails, delete the auth user to maintain consistency
+              try {
+                await supabaseAdmin.auth.admin.deleteUser(userId);
+                console.log("Cleaned up auth user after profile creation failure");
+              } catch (cleanupError) {
+                console.error("Error cleaning up auth user:", cleanupError);
+              }
+              
+              return NextResponse.json(
+                { error: "Database error saving new user" },
+                { status: 500 }
+              );
+            } else {
+              console.log("Profile created successfully using RPC function");
+            }
+          } else {
+            console.log("Profile created successfully using direct insert");
+          }
+        } catch (insertAttemptError) {
+          console.error("Error during profile creation attempt:", insertAttemptError);
           
           // If profile creation fails, delete the auth user to maintain consistency
           try {
-            await supabaseAdmin.auth.admin.deleteUser(userId)
-            console.log("Cleaned up auth user after profile creation failure")
+            await supabaseAdmin.auth.admin.deleteUser(userId);
+            console.log("Cleaned up auth user after profile creation failure");
           } catch (cleanupError) {
-            console.error("Error cleaning up auth user:", cleanupError)
+            console.error("Error cleaning up auth user:", cleanupError);
           }
           
           return NextResponse.json(
             { error: "Database error saving new user" },
             { status: 500 }
-          )
-        } else {
-          console.log("Profile created successfully using RPC function")
+          );
         }
         
-        // Extract data from the function result
-        const pioneerNumber = profileData.pioneer_number;
-        const isGenesisPioneer = profileData.is_genesis_pioneer;
-
         // Step 5: Handle referral if provided
         if (referralCode) {
           try {
