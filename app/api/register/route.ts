@@ -256,19 +256,6 @@ export async function POST(request: Request) {
               }
             }
             
-            // Insert the profile
-            console.log("Inserting profile with data:", {
-              id: userId,
-              username: finalUsername,
-              is_pi_user: isPiUser,
-              pioneer_number: nextPioneerNumber,
-              is_genesis_pioneer: isGenesisPioneer,
-              referral_code: generateUniqueReferralCode(finalUsername),
-              email: email,
-              country: country,
-              referral_source: referralSource || null
-            });
-            
             // If there's a referral code, look up the referrer ID first
             let referrerId = null;
             if (referralCode) {
@@ -288,6 +275,21 @@ export async function POST(request: Request) {
                 // Continue with registration even if referrer lookup fails
               }
             }
+            
+            // Insert the profile
+            console.log("Inserting profile with data:", {
+              id: userId,
+              username: finalUsername,
+              is_pi_user: isPiUser,
+              pioneer_number: nextPioneerNumber,
+              is_genesis_pioneer: isGenesisPioneer,
+              referral_code: generateUniqueReferralCode(finalUsername),
+              email: email,
+              country: country,
+              referral_source: referralSource || null,
+              total_referrals: 0,
+              referred_by: referrerId
+            });
             
             const { error: insertError } = await supabaseAdmin
               .from("profiles")
