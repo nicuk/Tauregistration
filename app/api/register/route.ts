@@ -199,66 +199,78 @@ export async function POST(request: Request) {
       try {
         console.log("Creating user profile with pioneer number:", pioneerNumber);
         
-        // Try using the create_complete_user_profile function first as it handles all the logic
+        // Try using direct insert first since we know it works reliably
         try {
-          console.log("Attempting to use create_complete_user_profile function");
-          const { data, error: profileError } = await supabaseAdmin
-            .rpc('create_complete_user_profile', {
-              user_id: userId,
-              user_username: finalUsername,
-              user_is_pi: isPiUser,
-              user_referral_code: generateUniqueReferralCode(finalUsername),
-              user_email: email,
-              user_country: country,
-              user_referral_source: referralSource || null
+          console.log("Attempting direct insert to profiles table");
+          
+          // Get the next pioneer number if user is a Pi user
+          let nextPioneerNumber = null;
+          let isGenesisPioneer = false;
+          
+          if (isPiUser) {
+            try {
+              // Get current count of pioneers
+              const { data: statsData } = await supabaseAdmin
+                .from("pioneer_stats_table")
+                .select("total_pioneers")
+                .eq("id", 1)
+                .single();
+                
+              const currentCount = (statsData?.total_pioneers || 0) + 1;
+              nextPioneerNumber = currentCount;
+              isGenesisPioneer = currentCount <= 10000;
+              
+              // Update the pioneer stats
+              await supabaseAdmin
+                .from("pioneer_stats_table")
+                .update({
+                  total_pioneers: currentCount,
+                  genesis_pioneers: isGenesisPioneer ? supabase.sql`genesis_pioneers + 1` : supabase.sql`genesis_pioneers`,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("id", 1);
+            } catch (statsError) {
+              console.error("Error getting/updating pioneer stats:", statsError);
+              // Continue with registration even if stats update fails
+            }
+          }
+          
+          // Insert the profile
+          const { error: insertError } = await supabaseAdmin
+            .from("profiles")
+            .insert({
+              id: userId,
+              username: finalUsername,
+              is_pi_user: isPiUser,
+              pioneer_number: nextPioneerNumber,
+              is_genesis_pioneer: isGenesisPioneer,
+              referral_code: generateUniqueReferralCode(finalUsername),
+              email: email,
+              country: country,
+              referral_source: referralSource || null,
+              total_referrals: 0
             });
             
-          if (profileError) {
-            console.error("RPC failed. Error code:", profileError.code);
-            console.error("Error message:", profileError.message);
-            console.error("Error details:", profileError.details);
-            console.error("Full error object:", JSON.stringify(profileError, null, 2));
+          if (insertError) {
+            console.error("Direct insert failed. Error code:", insertError.code);
+            console.error("Error message:", insertError.message);
+            console.error("Error details:", insertError.details);
+            console.error("Full error object:", JSON.stringify(insertError, null, 2));
             
-            // Try direct insert as fallback
-            console.log("RPC failed, trying direct insert as fallback");
-            const { error: insertError } = await supabaseAdmin
-              .from("profiles")
-              .insert({
-                id: userId,
-                username: finalUsername,
-                is_pi_user: isPiUser,
-                pioneer_number: pioneerNumber,
-                is_genesis_pioneer: isGenesisPioneer,
-                referral_code: generateUniqueReferralCode(finalUsername),
-                email: email,
-                country: country,
-                referral_source: referralSource || null,
-                total_referrals: 0
-              });
-              
-            if (insertError) {
-              console.error("Direct insert also failed. Error code:", insertError.code);
-              console.error("Error message:", insertError.message);
-              console.error("Error details:", insertError.details);
-              console.error("Full error object:", JSON.stringify(insertError, null, 2));
-              
-              // If profile creation fails, delete the auth user to maintain consistency
-              try {
-                await supabaseAdmin.auth.admin.deleteUser(userId);
-                console.log("Cleaned up auth user after profile creation failure");
-              } catch (cleanupError) {
-                console.error("Error cleaning up auth user:", cleanupError);
-              }
-              
-              return NextResponse.json(
-                { error: "Database error saving new user" },
-                { status: 500 }
-              );
-            } else {
-              console.log("Profile created successfully using direct insert");
+            // If profile creation fails, delete the auth user to maintain consistency
+            try {
+              await supabaseAdmin.auth.admin.deleteUser(userId);
+              console.log("Cleaned up auth user after profile creation failure");
+            } catch (cleanupError) {
+              console.error("Error cleaning up auth user:", cleanupError);
             }
+            
+            return NextResponse.json(
+              { error: "Database error saving new user" },
+              { status: 500 }
+            );
           } else {
-            console.log("Profile created successfully using RPC function");
+            console.log("Profile created successfully using direct insert");
           }
         } catch (profileCreationError) {
           console.error("Error during profile creation attempt:", profileCreationError);
