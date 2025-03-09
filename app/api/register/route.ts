@@ -408,7 +408,7 @@ export async function POST(request: Request) {
                         try {
                           const { error: updateReferredByError } = await supabaseAdmin
                             .from("profiles")
-                            .update({ referred_by: referrerData.id })
+                            .update({ referred_by: referrerData.id.toString() })
                             .eq("id", userId)
 
                           if (updateReferredByError) {
