@@ -1,0 +1,578 @@
+-- Update the user registration function to handle referrer_code correctly
+-- First drop all versions of the function to avoid ambiguity
+DROP FUNCTION IF EXISTS create_complete_user_profile(UUID, TEXT, BOOLEAN, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS create_complete_user_profile(UUID, TEXT, BOOLEAN, TEXT, TEXT, TEXT, TEXT, TEXT);
+
+-- Now create the updated function
+CREATE OR REPLACE FUNCTION create_complete_user_profile(
+  user_id UUID,
+  user_username TEXT,
+  user_is_pi BOOLEAN,
+  user_referral_code TEXT DEFAULT NULL,
+  user_country TEXT DEFAULT NULL,
+  user_referral_source TEXT DEFAULT NULL,
+  user_email TEXT DEFAULT NULL,
+  referrer_code TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+  unique_username TEXT;
+  pioneer_number BIGINT;
+  is_genesis_pioneer BOOLEAN;
+  registration_number TEXT;
+  result JSONB;
+BEGIN
+  -- Start a transaction
+  BEGIN
+    -- Get the next pioneer number atomically
+    SELECT get_next_pioneer_number() INTO pioneer_number;
+    
+    -- Determine if this is a genesis pioneer (first 10,000 users)
+    is_genesis_pioneer := pioneer_number <= 10000;
+    
+    -- Create registration number
+    registration_number := 'TAU-' || lpad(pioneer_number::text, 8, '0');
+    
+    -- Generate a unique username if there's a conflict
+    SELECT 
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM profiles WHERE username = user_username) 
+        THEN user_username || '-' || floor(random() * 1000)::text
+        ELSE user_username
+      END INTO unique_username;
+    
+    -- Insert the profile
+    INSERT INTO profiles (
+      id,
+      username,
+      is_pi_user,
+      registration_number,
+      pioneer_number,
+      is_genesis_pioneer,
+      referral_code,
+      country,
+      referral_source,
+      email,
+      created_at,
+      updated_at
+    ) VALUES (
+      user_id,
+      unique_username,
+      user_is_pi,
+      registration_number,
+      pioneer_number,
+      is_genesis_pioneer,
+      user_referral_code,
+      user_country,
+      user_referral_source,
+      COALESCE(user_email, unique_username || '@example.com'),
+      NOW(),
+      NOW()
+    );
+    
+    -- Update pioneer stats in a single operation
+    INSERT INTO pioneer_stats_table (id, total_pioneers, genesis_pioneers)
+    VALUES (1, 1, CASE WHEN is_genesis_pioneer THEN 1 ELSE 0 END)
+    ON CONFLICT (id) DO UPDATE SET
+      total_pioneers = pioneer_stats_table.total_pioneers + 1,
+      genesis_pioneers = CASE 
+        WHEN is_genesis_pioneer THEN pioneer_stats_table.genesis_pioneers + 1
+        ELSE pioneer_stats_table.genesis_pioneers
+      END;
+    
+    -- Process referral if provided
+    IF referrer_code IS NOT NULL THEN
+      -- Find the referrer
+      DECLARE
+        referrer_id UUID;
+      BEGIN
+        SELECT id INTO referrer_id FROM profiles 
+        WHERE referral_code = referrer_code;
+        
+        IF referrer_id IS NOT NULL AND referrer_id <> user_id THEN
+          -- Record the referral
+          INSERT INTO referrals (
+            referrer_id,
+            referred_id,
+            created_at
+          ) VALUES (
+            referrer_id,
+            user_id,
+            NOW()
+          );
+          
+          -- Update referrer's stats
+          UPDATE profiles
+          SET total_referrals = COALESCE(total_referrals, 0) + 1
+          WHERE id = referrer_id;
+        END IF;
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- Log error but continue
+          RAISE NOTICE 'Error processing referral: %', SQLERRM;
+      END;
+    END IF;
+    
+    -- Build the result
+    result := jsonb_build_object(
+      'success', true,
+      'pioneer_number', pioneer_number,
+      'is_genesis_pioneer', is_genesis_pioneer,
+      'registration_number', registration_number,
+      'username', unique_username
+    );
+    
+  EXCEPTION
+    WHEN OTHERS THEN
+      result := jsonb_build_object(
+        'success', false,
+        'error', SQLERRM
+      );
+  END;
+  
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+
+-- TAU Network Registration System - Database Cleanup Script
+-- Created: 2025-03-07
+-- This script cleans up orphaned data and fixes potential inconsistencies
+
+-- 1. Delete orphaned profiles (profiles without corresponding auth users)
+DELETE FROM profiles
+WHERE id NOT IN (SELECT id FROM auth.users);
+
+-- 2. Delete orphaned referrals (referrals pointing to non-existent profiles)
+DELETE FROM referrals
+WHERE referrer_id NOT IN (SELECT id FROM profiles)
+   OR referred_id NOT IN (SELECT id FROM profiles);
+
+-- 3. Reset pioneer_number_seq to match the actual number of profiles
+DO $$
+DECLARE
+  max_pioneer_number BIGINT;
+BEGIN
+  -- Get the maximum pioneer number currently in use
+  SELECT COALESCE(MAX(pioneer_number), 0) INTO max_pioneer_number FROM profiles;
+  
+  -- Reset the sequence to start after the maximum
+  EXECUTE 'ALTER SEQUENCE pioneer_number_seq RESTART WITH ' || (max_pioneer_number + 1);
+  
+  RAISE NOTICE 'Reset pioneer_number_seq to start with %', (max_pioneer_number + 1);
+END;
+$$;
+
+-- 4. Reset pioneer stats to match actual counts
+UPDATE pioneer_stats_table
+SET 
+  total_pioneers = (SELECT COUNT(*) FROM profiles),
+  genesis_pioneers = (SELECT COUNT(*) FROM profiles WHERE is_genesis_pioneer = true)
+WHERE id = 1;
+
+-- 5. Reset referral counts to match actual referrals
+UPDATE profiles p
+SET total_referrals = (
+  SELECT COUNT(*) 
+  FROM referrals 
+  WHERE referrer_id = p.id
+);
+
+-- 6. Ensure email uniqueness in profiles table
+DO $$
+BEGIN
+  -- Check if there's already a unique constraint on email
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    WHERE rel.relname = 'profiles' 
+    AND nsp.nspname = 'public'
+    AND con.conname = 'profiles_email_key'
+  ) THEN
+    -- Create a unique index on email (case insensitive)
+    CREATE UNIQUE INDEX IF NOT EXISTS profiles_email_key 
+    ON profiles (lower(email));
+  END IF;
+END;
+$$;
+
+-- 7. Report database status after cleanup
+SELECT 
+  (SELECT COUNT(*) FROM auth.users) AS auth_users_count,
+  (SELECT COUNT(*) FROM profiles) AS profiles_count,
+  (SELECT COUNT(*) FROM referrals) AS referrals_count,
+  (SELECT nextval('pioneer_number_seq')) AS next_pioneer_number,
+  (SELECT total_pioneers FROM pioneer_stats_table WHERE id = 1) AS total_pioneers_count,
+  (SELECT genesis_pioneers FROM pioneer_stats_table WHERE id = 1) AS genesis_pioneers_count;
+
+
+-- 1. Delete all referrals
+TRUNCATE TABLE referrals CASCADE;
+
+-- 2. Delete all profiles 
+DELETE FROM profiles;
+
+-- 3. Reset pioneer number sequence
+ALTER SEQUENCE pioneer_number_seq RESTART WITH 1;
+
+-- 4. Reset pioneer stats
+UPDATE pioneer_stats_table
+SET total_pioneers = 0, genesis_pioneers = 0
+WHERE id = 1;
+
+-- 5. Verify the changes
+SELECT nextval('pioneer_number_seq') AS next_pioneer_number;
+SELECT * FROM pioneer_stats_table;
+
+
+
+
+-- TAU Network Registration System - Complete SQL Setup
+-- Created: 2025-03-07
+-- This file contains all the necessary database functions and structures for the registration system
+
+-- 1. Pioneer Number Sequence for atomic number generation
+CREATE SEQUENCE IF NOT EXISTS pioneer_number_seq START 1;
+
+-- 2. Function to get the next pioneer number atomically
+CREATE OR REPLACE FUNCTION get_next_pioneer_number() 
+RETURNS BIGINT AS $$
+DECLARE
+  next_number BIGINT;
+BEGIN
+  SELECT nextval('pioneer_number_seq') INTO next_number;
+  RETURN next_number;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. Complete transaction-safe procedure for user registration
+CREATE OR REPLACE FUNCTION create_complete_user_profile(
+  user_id UUID,
+  user_username TEXT,
+  user_is_pi BOOLEAN,
+  user_referral_code TEXT DEFAULT NULL,
+  user_country TEXT DEFAULT NULL,
+  user_referral_source TEXT DEFAULT NULL,
+  user_email TEXT DEFAULT NULL,
+  referrer_code TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+  unique_username TEXT;
+  pioneer_number BIGINT;
+  is_genesis_pioneer BOOLEAN;
+  registration_number TEXT;
+  result JSONB;
+BEGIN
+  -- Start a transaction
+  BEGIN
+    -- Get the next pioneer number atomically
+    SELECT get_next_pioneer_number() INTO pioneer_number;
+    
+    -- Determine if this is a genesis pioneer (first 10,000 users)
+    is_genesis_pioneer := pioneer_number <= 10000;
+    
+    -- Create registration number
+    registration_number := 'TAU-' || lpad(pioneer_number::text, 8, '0');
+    
+    -- Generate a unique username if there's a conflict
+    SELECT 
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM profiles WHERE username = user_username) 
+        THEN user_username || '-' || floor(random() * 1000)::text
+        ELSE user_username
+      END INTO unique_username;
+    
+    -- Insert the profile
+    INSERT INTO profiles (
+      id,
+      username,
+      is_pi_user,
+      registration_number,
+      pioneer_number,
+      is_genesis_pioneer,
+      referral_code,
+      country,
+      referral_source,
+      email,
+      created_at,
+      updated_at
+    ) VALUES (
+      user_id,
+      unique_username,
+      user_is_pi,
+      registration_number,
+      pioneer_number,
+      is_genesis_pioneer,
+      user_referral_code,
+      user_country,
+      user_referral_source,
+      COALESCE(user_email, unique_username || '@example.com'),
+      NOW(),
+      NOW()
+    );
+    
+    -- Update pioneer stats in a single operation
+    INSERT INTO pioneer_stats_table (id, total_pioneers, genesis_pioneers)
+    VALUES (1, 1, CASE WHEN is_genesis_pioneer THEN 1 ELSE 0 END)
+    ON CONFLICT (id) DO UPDATE SET
+      total_pioneers = pioneer_stats_table.total_pioneers + 1,
+      genesis_pioneers = CASE 
+        WHEN is_genesis_pioneer THEN pioneer_stats_table.genesis_pioneers + 1
+        ELSE pioneer_stats_table.genesis_pioneers
+      END;
+    
+    -- Process referral if provided
+    IF referrer_code IS NOT NULL THEN
+      -- Find the referrer
+      DECLARE
+        referrer_id UUID;
+      BEGIN
+        SELECT id INTO referrer_id FROM profiles 
+        WHERE referral_code = referrer_code;
+        
+        IF referrer_id IS NOT NULL AND referrer_id <> user_id THEN
+          -- Record the referral
+          INSERT INTO referrals (
+            referrer_id,
+            referred_id,
+            created_at
+          ) VALUES (
+            referrer_id,
+            user_id,
+            NOW()
+          );
+          
+          -- Update referrer's stats
+          UPDATE profiles
+          SET total_referrals = COALESCE(total_referrals, 0) + 1
+          WHERE id = referrer_id;
+        END IF;
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- Log error but continue
+          RAISE NOTICE 'Error processing referral: %', SQLERRM;
+      END;
+    END IF;
+    
+    -- Build the result
+    result := jsonb_build_object(
+      'success', true,
+      'pioneer_number', pioneer_number,
+      'is_genesis_pioneer', is_genesis_pioneer,
+      'registration_number', registration_number,
+      'username', unique_username
+    );
+    
+  EXCEPTION
+    WHEN OTHERS THEN
+      result := jsonb_build_object(
+        'success', false,
+        'error', SQLERRM
+      );
+  END;
+  
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Function to process referrals separately (if needed)
+CREATE OR REPLACE FUNCTION process_referral(
+  referrer_code TEXT,
+  referred_user_id UUID
+) RETURNS BOOLEAN AS $$
+DECLARE
+  referrer_id UUID;
+  success BOOLEAN := false;
+BEGIN
+  -- Find the referrer
+  SELECT id INTO referrer_id FROM profiles 
+  WHERE referral_code = referrer_code;
+  
+  IF referrer_id IS NOT NULL THEN
+    -- Record the referral
+    BEGIN
+      INSERT INTO referrals (
+        referrer_id,
+        referred_id,
+        created_at
+      ) VALUES (
+        referrer_id,
+        referred_user_id,
+        NOW()
+      );
+      
+      -- Update referrer's stats
+      UPDATE profiles
+      SET total_referrals = COALESCE(total_referrals, 0) + 1
+      WHERE id = referrer_id;
+      
+      success := true;
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- Likely a duplicate referral
+        success := false;
+    END;
+  END IF;
+  
+  RETURN success;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. Create or update the referrals table if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'referrals') THEN
+    CREATE TABLE referrals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      referrer_id UUID NOT NULL REFERENCES profiles(id),
+      referred_id UUID NOT NULL REFERENCES profiles(id),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(referred_id)
+    );
+    
+    -- Add RLS policies for referrals table
+    ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
+    
+    -- Allow service role full access
+    CREATE POLICY "Service role can manage referrals" 
+    ON referrals FOR ALL 
+    USING (auth.role() = 'service_role'::text);
+    
+    -- Users can read their own referrals
+    CREATE POLICY "Users can read their own referrals" 
+    ON referrals FOR SELECT 
+    USING ((auth.uid() = referrer_id) OR (auth.uid() = referred_id));
+  END IF;
+  
+  -- Ensure profiles table has total_referrals column
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'profiles' 
+    AND column_name = 'total_referrals'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN total_referrals INTEGER DEFAULT 0;
+  END IF;
+END;
+$$;
+
+-- 6. Create pioneer_stats_table if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pioneer_stats_table') THEN
+    CREATE TABLE pioneer_stats_table (
+      id INTEGER PRIMARY KEY,
+      total_pioneers INTEGER DEFAULT 0,
+      genesis_pioneers INTEGER DEFAULT 0
+    );
+    
+    -- Insert initial record
+    INSERT INTO pioneer_stats_table (id, total_pioneers, genesis_pioneers)
+    VALUES (1, 0, 0);
+  END IF;
+END;
+$$;
+
+-- 7. Fix any RLS policy conflicts
+DO $$
+BEGIN
+  -- Drop potentially conflicting policies
+  DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
+  DROP POLICY IF EXISTS "Users can insert their own profile." ON profiles;
+  DROP POLICY IF EXISTS "Service role can insert profiles" ON profiles;
+  
+  -- Create a single clear policy for service role
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'profiles' 
+    AND policyname = 'Service role has full access'
+  ) THEN
+    CREATE POLICY "Service role has full access" 
+    ON profiles FOR ALL 
+    USING (auth.role() = 'service_role'::text);
+  END IF;
+  
+  -- Create a policy for users to insert their own profile
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'profiles' 
+    AND policyname = 'Users can create their own profile'
+  ) THEN
+    CREATE POLICY "Users can create their own profile" 
+    ON profiles FOR INSERT 
+    WITH CHECK (auth.uid() = id);
+  END IF;
+  
+  -- Create a policy for users to read any profile
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'profiles' 
+    AND policyname = 'Users can read any profile'
+  ) THEN
+    CREATE POLICY "Users can read any profile" 
+    ON profiles FOR SELECT 
+    USING (true);
+  END IF;
+  
+  -- Create a policy for users to update their own profile
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'profiles' 
+    AND policyname = 'Users can update their own profile'
+  ) THEN
+    CREATE POLICY "Users can update their own profile" 
+    ON profiles FOR UPDATE 
+    USING (auth.uid() = id);
+  END IF;
+END;
+$$;
+
+-- 8. Reset functions for testing and development
+CREATE OR REPLACE FUNCTION reset_all_test_data() 
+RETURNS TEXT AS $$
+DECLARE
+  result TEXT;
+BEGIN
+  -- Reset sequence
+  ALTER SEQUENCE IF EXISTS pioneer_number_seq RESTART WITH 1;
+  
+  -- Reset stats
+  TRUNCATE TABLE pioneer_stats_table;
+  INSERT INTO pioneer_stats_table (id, total_pioneers, genesis_pioneers)
+  VALUES (1, 0, 0);
+  
+  -- Clear referrals
+  TRUNCATE TABLE referrals;
+  
+  -- Reset profile counters
+  UPDATE profiles SET total_referrals = 0;
+  
+  result := 'All test data has been reset successfully.';
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION delete_user_completely(user_id UUID) 
+RETURNS BOOLEAN AS $$
+DECLARE
+  success BOOLEAN := false;
+BEGIN
+  -- Delete from referrals first
+  DELETE FROM referrals WHERE referrer_id = user_id OR referred_id = user_id;
+  
+  -- Delete from profiles
+  DELETE FROM profiles WHERE id = user_id;
+  
+  success := true;
+  RETURN success;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
