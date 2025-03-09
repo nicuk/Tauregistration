@@ -83,168 +83,181 @@ export async function POST(request: Request) {
     // Generate a unique referral code for this user
     const userReferralCode = generateUniqueReferralCode(finalUsername)
 
-    // Step 1: Check if the email already exists in profiles table
-    // This avoids the rate-limited admin.listUsers() API
-    const { data: existingProfilesByEmail, error: emailCheckError2 } = await supabaseAdmin
-      .from("profiles")
-      .select("email")
-      .eq("email", email)
-      .limit(1)
-    
-    if (emailCheckError2) {
-      console.error("Error checking existing profiles by email:", emailCheckError2)
-      return NextResponse.json(
-        { error: "Error checking user existence" },
-        { status: 500 }
-      )
-    }
-
-    if (existingProfilesByEmail && existingProfilesByEmail.length > 0) {
-      return NextResponse.json(
-        { error: "email_already_registered", message: "This email address is already registered. Please use a different email or try logging in." },
-        { status: 400 }
-      )
-    }
-
-    // Step 2: Get the current count of pioneers for assigning the next pioneer number
-    const { count: pioneerCount, error: countError } = await supabaseAdmin
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-
-    if (countError) {
-      console.error("Error counting pioneers:", countError)
-      return NextResponse.json(
-        { error: "Error determining pioneer number" },
-        { status: 500 }
-      )
-    }
-
-    // Calculate the pioneer number (1-based index)
-    const pioneerNumber: number = (pioneerCount || 0) + 1
-
-    // Determine if this is a genesis pioneer (first 10,000 users)
-    const isGenesisPioneer: boolean = pioneerNumber <= 10000
-
-    // Step 3: Create the user in Auth
+    // Step 1: Check if email already exists
     try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${requestUrl.origin}/auth/callback`,
-          data: {
-            username: finalUsername,
-            is_pi_user: isPiUser,
-            pioneer_number: pioneerNumber,
-            is_genesis_pioneer: isGenesisPioneer,
-            country,
-            referral_source: referralSource
-          }
-        },
-      })
-
-      if (signUpError) {
-        console.error("Error creating user:", signUpError)
+      // First, ensure the pioneer_stats_table is initialized
+      const { data: statsTableCheck, error: statsCheckError } = await supabaseAdmin
+        .from("pioneer_stats_table")
+        .select("id")
+        .eq("id", 1)
+        .single();
         
-        // Provide more specific error messages based on Supabase error codes
-        if (signUpError.message.includes("email")) {
-          return NextResponse.json(
-            { error: "Invalid email or email already in use" },
-            { status: 400 }
-          )
-        } else if (signUpError.message.includes("password")) {
-          return NextResponse.json(
-            { error: "Password does not meet requirements" },
-            { status: 400 }
-          )
+      if (statsCheckError || !statsTableCheck) {
+        console.log("pioneer_stats_table needs initialization, creating row with ID=1");
+        const { error: statsInitError } = await supabaseAdmin
+          .from("pioneer_stats_table")
+          .insert({
+            id: 1,
+            total_pioneers: 0,
+            genesis_pioneers: 0,
+            updated_at: new Date().toISOString()
+          });
+          
+        if (statsInitError) {
+          console.error("Failed to initialize pioneer_stats_table:", statsInitError);
+          // Continue anyway, as the table might have been initialized by another process
         } else {
-          return NextResponse.json(
-            { error: signUpError.message || "Error creating user" },
-            { status: signUpError.status || 500 }
-          )
+          console.log("Successfully initialized pioneer_stats_table");
         }
       }
-
-      if (!authData.user) {
-        console.error("No user returned from signUp")
+      
+      // Now check if the email already exists
+      const { data: existingProfilesByEmail, error: emailCheckError } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .limit(1)
+    
+      if (emailCheckError) {
+        console.error("Error checking existing profiles by email:", emailCheckError)
         return NextResponse.json(
-          { error: "Failed to create user account" },
+          { error: "Error checking user existence" },
           { status: 500 }
         )
       }
 
-      const userId = authData.user.id
-
-      // Additional check: Make sure there's no profile with this ID already
-      const { data: existingProfileWithId, error: idCheckError } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("id", userId)
-        .limit(1)
-    
-      if (idCheckError) {
-        console.error("Error checking existing profile by ID:", idCheckError)
-      } else if (existingProfileWithId && existingProfileWithId.length > 0) {
-        // If profile exists with this ID, delete it first
-        try {
-          await supabaseAdmin.from("profiles").delete().eq("id", userId)
-          console.log("Cleaned up existing profile with ID:", userId)
-        } catch (cleanupError) {
-          console.error("Error cleaning up existing profile:", cleanupError)
-          // Continue anyway, the transaction might still succeed
-        }
+      if (existingProfilesByEmail && existingProfilesByEmail.length > 0) {
+        return NextResponse.json(
+          { error: "email_already_registered", message: "This email address is already registered. Please use a different email or try logging in." },
+          { status: 400 }
+        )
       }
 
-      // Step 4: Create the user profile
+      // Step 2: Get the current count of pioneers for assigning the next pioneer number
+      const { count: pioneerCount, error: countError } = await supabaseAdmin
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+
+      if (countError) {
+        console.error("Error counting pioneers:", countError)
+        return NextResponse.json(
+          { error: "Error determining pioneer number" },
+          { status: 500 }
+        )
+      }
+
+      // Calculate the pioneer number (1-based index)
+      const pioneerNumber: number = (pioneerCount || 0) + 1
+
+      // Determine if this is a genesis pioneer (first 10,000 users)
+      const isGenesisPioneer: boolean = pioneerNumber <= 10000
+
+      // Step 3: Create the user in Auth
       try {
-        console.log("Creating user profile with pioneer number:", pioneerNumber);
-        
-        // Try using direct insert first since we know it works reliably
-        try {
-          console.log("Attempting direct insert to profiles table");
-          
-          // Get the next pioneer number if user is a Pi user
-          let nextPioneerNumber = null;
-          let isGenesisPioneer = false;
-          
-          if (isPiUser) {
-            try {
-              // Get the current count of pioneers directly from the profiles table
-              const { count: pioneerCount, error: countError } = await supabaseAdmin
-                .from("profiles")
-                .select("*", { count: "exact", head: true })
-                .eq("is_pi_user", true);
-                
-              if (countError) {
-                console.error("Error counting pioneers:", countError);
-              } else {
-                const currentCount = (pioneerCount || 0) + 1;
-                nextPioneerNumber = currentCount;
-                isGenesisPioneer = currentCount <= 10000;
-                console.log(`Calculated pioneer number: ${nextPioneerNumber}, isGenesisPioneer: ${isGenesisPioneer}`);
-              }
-            } catch (statsError) {
-              console.error("Error getting pioneer stats:", statsError);
-              // Continue with registration even if stats update fails
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${requestUrl.origin}/auth/callback`,
+            data: {
+              username: finalUsername,
+              is_pi_user: isPiUser,
+              pioneer_number: pioneerNumber,
+              is_genesis_pioneer: isGenesisPioneer,
+              country,
+              referral_source: referralSource
             }
+          },
+        })
+
+        if (signUpError) {
+          console.error("Error creating user:", signUpError)
+          
+          // Provide more specific error messages based on Supabase error codes
+          if (signUpError.message.includes("email")) {
+            return NextResponse.json(
+              { error: "Invalid email or email already in use" },
+              { status: 400 }
+            )
+          } else if (signUpError.message.includes("password")) {
+            return NextResponse.json(
+              { error: "Password does not meet requirements" },
+              { status: 400 }
+            )
+          } else {
+            return NextResponse.json(
+              { error: signUpError.message || "Error creating user" },
+              { status: signUpError.status || 500 }
+            )
           }
+        }
+
+        if (!authData.user) {
+          console.error("No user returned from signUp")
+          return NextResponse.json(
+            { error: "Failed to create user account" },
+            { status: 500 }
+          )
+        }
+
+        const userId = authData.user.id
+
+        // Additional check: Make sure there's no profile with this ID already
+        const { data: existingProfileWithId, error: idCheckError } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("id", userId)
+          .limit(1)
+    
+        if (idCheckError) {
+          console.error("Error checking existing profile by ID:", idCheckError)
+        } else if (existingProfileWithId && existingProfileWithId.length > 0) {
+          // If profile exists with this ID, delete it first
+          try {
+            await supabaseAdmin.from("profiles").delete().eq("id", userId)
+            console.log("Cleaned up existing profile with ID:", userId)
+          } catch (cleanupError) {
+            console.error("Error cleaning up existing profile:", cleanupError)
+            // Continue anyway, the transaction might still succeed
+          }
+        }
+
+        // Step 4: Create the user profile
+        try {
+          console.log("Creating user profile with pioneer number:", pioneerNumber);
           
-          // Insert the profile
-          console.log("Inserting profile with data:", {
-            id: userId,
-            username: finalUsername,
-            is_pi_user: isPiUser,
-            pioneer_number: nextPioneerNumber,
-            is_genesis_pioneer: isGenesisPioneer,
-            referral_code: generateUniqueReferralCode(finalUsername),
-            email: email,
-            country: country,
-            referral_source: referralSource || null
-          });
-          
-          const { error: insertError } = await supabaseAdmin
-            .from("profiles")
-            .insert({
+          // Try using direct insert first since we know it works reliably
+          try {
+            console.log("Attempting direct insert to profiles table");
+            
+            // Get the next pioneer number if user is a Pi user
+            let nextPioneerNumber = null;
+            let isGenesisPioneer = false;
+            
+            if (isPiUser) {
+              try {
+                // Get the current count of pioneers directly from the profiles table
+                const { count: pioneerCount, error: countError } = await supabaseAdmin
+                  .from("profiles")
+                  .select("*", { count: "exact", head: true })
+                  .eq("is_pi_user", true);
+                  
+                if (countError) {
+                  console.error("Error counting pioneers:", countError);
+                } else {
+                  const currentCount = (pioneerCount || 0) + 1;
+                  nextPioneerNumber = currentCount;
+                  isGenesisPioneer = currentCount <= 10000;
+                  console.log(`Calculated pioneer number: ${nextPioneerNumber}, isGenesisPioneer: ${isGenesisPioneer}`);
+                }
+              } catch (statsError) {
+                console.error("Error getting pioneer stats:", statsError);
+                // Continue with registration even if stats update fails
+              }
+            }
+            
+            // Insert the profile
+            console.log("Inserting profile with data:", {
               id: userId,
               username: finalUsername,
               is_pi_user: isPiUser,
@@ -253,15 +266,47 @@ export async function POST(request: Request) {
               referral_code: generateUniqueReferralCode(finalUsername),
               email: email,
               country: country,
-              referral_source: referralSource || null,
-              total_referrals: 0
+              referral_source: referralSource || null
             });
             
-          if (insertError) {
-            console.error("Direct insert failed. Error code:", insertError.code);
-            console.error("Error message:", insertError.message);
-            console.error("Error details:", insertError.details);
-            console.error("Full error object:", JSON.stringify(insertError, null, 2));
+            const { error: insertError } = await supabaseAdmin
+              .from("profiles")
+              .insert({
+                id: userId,
+                username: finalUsername,
+                is_pi_user: isPiUser,
+                pioneer_number: nextPioneerNumber,
+                is_genesis_pioneer: isGenesisPioneer,
+                referral_code: generateUniqueReferralCode(finalUsername),
+                email: email,
+                country: country,
+                referral_source: referralSource || null,
+                total_referrals: 0
+              });
+              
+            if (insertError) {
+              console.error("Direct insert failed. Error code:", insertError.code);
+              console.error("Error message:", insertError.message);
+              console.error("Error details:", insertError.details);
+              console.error("Full error object:", JSON.stringify(insertError, null, 2));
+              
+              // If profile creation fails, delete the auth user to maintain consistency
+              try {
+                await supabaseAdmin.auth.admin.deleteUser(userId);
+                console.log("Cleaned up auth user after profile creation failure");
+              } catch (cleanupError) {
+                console.error("Error cleaning up auth user:", cleanupError);
+              }
+              
+              return NextResponse.json(
+                { error: "Database error saving new user" },
+                { status: 500 }
+              );
+            } else {
+              console.log("Profile created successfully using direct insert");
+            }
+          } catch (profileCreationError) {
+            console.error("Error during profile creation attempt:", profileCreationError);
             
             // If profile creation fails, delete the auth user to maintain consistency
             try {
@@ -275,162 +320,151 @@ export async function POST(request: Request) {
               { error: "Database error saving new user" },
               { status: 500 }
             );
-          } else {
-            console.log("Profile created successfully using direct insert");
           }
-        } catch (profileCreationError) {
-          console.error("Error during profile creation attempt:", profileCreationError);
           
-          // If profile creation fails, delete the auth user to maintain consistency
+          // Step 5: Handle referral if provided
+          if (referralCode) {
+            try {
+              // First check if the referral code is valid
+              const { data: referrerData, error: referrerError } = await supabaseAdmin
+                .from("profiles")
+                .select("id, total_referrals")
+                .eq("referral_code", referralCode)
+                .single()
+
+              if (referrerError) {
+                console.error("Error finding referrer:", referrerError)
+                // Continue with registration even if referrer lookup fails
+              } else if (referrerData) {
+                // Prevent self-referrals
+                if (referrerData.id === userId) {
+                  console.log("Self-referral detected, skipping referral creation")
+                } else {
+                  // Check if this referral already exists to prevent duplicates
+                  const { data: existingReferral, error: checkReferralError } = await supabaseAdmin
+                    .from("referrals")
+                    .select("id")
+                    .eq("referrer_id", referrerData.id)
+                    .eq("referred_id", userId)
+                    .limit(1)
+                  
+                  if (checkReferralError) {
+                    console.error("Error checking existing referral:", checkReferralError)
+                  } else if (!existingReferral || existingReferral.length === 0) {
+                    // Only create the referral if it doesn't already exist
+                    try {
+                      const { error: createReferralError } = await supabaseAdmin
+                        .from("referrals")
+                        .insert({
+                          referrer_id: referrerData.id,
+                          referred_id: userId,
+                          status: "completed"
+                        })
+
+                      if (createReferralError) {
+                        console.error("Error creating referral record:", createReferralError)
+                        // Continue with registration even if referral creation fails
+                      } else {
+                        // Only update the referrer's count if the referral was successfully created
+                        try {
+                          const newReferralCount = (referrerData.total_referrals || 0) + 1
+                          const { error: updateReferrerError } = await supabaseAdmin
+                            .from("profiles")
+                            .update({ total_referrals: newReferralCount })
+                            .eq("id", referrerData.id)
+
+                          if (updateReferrerError) {
+                            console.error("Error updating referrer stats:", updateReferrerError)
+                          }
+                        } catch (updateError) {
+                          console.error("Exception updating referrer stats:", updateError)
+                        }
+                      }
+                    } catch (insertError) {
+                      console.error("Exception creating referral record:", insertError)
+                    }
+                  } else {
+                    console.log("Referral already exists, skipping creation")
+                  }
+                }
+              }
+            } catch (referralError) {
+              console.error("Error processing referral:", referralError)
+              // Non-blocking error - continue with registration
+            }
+          }
+
+          // Step 6: Update pioneer stats
+          // First, check if pioneer_stats_table has a record
+          const { data: existingStatsData, error: statsCheckError } = await supabaseAdmin
+            .from("pioneer_stats_table")
+            .select("*")
+            .single()
+
+          if (statsCheckError && statsCheckError.code !== "PGRST116") {
+            console.error("Error checking pioneer stats:", statsCheckError)
+          }
+
+          // If no record exists or there was an error, create/update the stats
+          if (!existingStatsData || statsCheckError) {
+            // Try to create a new record if none exists
+            const { error: insertStatsError } = await supabaseAdmin
+              .from("pioneer_stats_table")
+              .insert({
+                id: 1,
+                total_pioneers: 1,
+                genesis_pioneers: isGenesisPioneer ? 1 : 0
+              })
+              .onConflict("id")
+              .merge()
+
+            if (insertStatsError) {
+              console.error("Error creating pioneer stats:", insertStatsError)
+            }
+          } else {
+            // Update existing record
+            const { error: updateStatsError } = await supabaseAdmin
+              .from("pioneer_stats_table")
+              .update({
+                total_pioneers: existingStatsData.total_pioneers + 1,
+                genesis_pioneers: isGenesisPioneer 
+                  ? existingStatsData.genesis_pioneers + 1 
+                  : existingStatsData.genesis_pioneers
+              })
+              .eq("id", 1)
+
+            if (updateStatsError) {
+              console.error("Error updating pioneer stats:", updateStatsError)
+            }
+          }
+
+          return NextResponse.json(
+            {
+              message: "User created successfully",
+              pioneerNumber,
+              isGenesisPioneer
+            },
+            { status: 201 }
+          )
+        } catch (error: any) {
+          console.error("Registration error:", error)
+          
+          // Try to clean up the auth user if profile creation failed
           try {
-            await supabaseAdmin.auth.admin.deleteUser(userId);
-            console.log("Cleaned up auth user after profile creation failure");
+            await supabaseAdmin.auth.admin.deleteUser(userId)
           } catch (cleanupError) {
-            console.error("Error cleaning up auth user:", cleanupError);
+            console.error("Error cleaning up auth user after failed registration:", cleanupError)
           }
           
           return NextResponse.json(
-            { error: "Database error saving new user" },
+            { error: error.message || "An unexpected error occurred during registration" },
             { status: 500 }
-          );
+          )
         }
-        
-        // Step 5: Handle referral if provided
-        if (referralCode) {
-          try {
-            // First check if the referral code is valid
-            const { data: referrerData, error: referrerError } = await supabaseAdmin
-              .from("profiles")
-              .select("id, total_referrals")
-              .eq("referral_code", referralCode)
-              .single()
-
-            if (referrerError) {
-              console.error("Error finding referrer:", referrerError)
-              // Continue with registration even if referrer lookup fails
-            } else if (referrerData) {
-              // Prevent self-referrals
-              if (referrerData.id === userId) {
-                console.log("Self-referral detected, skipping referral creation")
-              } else {
-                // Check if this referral already exists to prevent duplicates
-                const { data: existingReferral, error: checkReferralError } = await supabaseAdmin
-                  .from("referrals")
-                  .select("id")
-                  .eq("referrer_id", referrerData.id)
-                  .eq("referred_id", userId)
-                  .limit(1)
-                
-                if (checkReferralError) {
-                  console.error("Error checking existing referral:", checkReferralError)
-                } else if (!existingReferral || existingReferral.length === 0) {
-                  // Only create the referral if it doesn't already exist
-                  try {
-                    const { error: createReferralError } = await supabaseAdmin
-                      .from("referrals")
-                      .insert({
-                        referrer_id: referrerData.id,
-                        referred_id: userId,
-                        status: "completed"
-                      })
-
-                    if (createReferralError) {
-                      console.error("Error creating referral record:", createReferralError)
-                      // Continue with registration even if referral creation fails
-                    } else {
-                      // Only update the referrer's count if the referral was successfully created
-                      try {
-                        const newReferralCount = (referrerData.total_referrals || 0) + 1
-                        const { error: updateReferrerError } = await supabaseAdmin
-                          .from("profiles")
-                          .update({ total_referrals: newReferralCount })
-                          .eq("id", referrerData.id)
-
-                        if (updateReferrerError) {
-                          console.error("Error updating referrer stats:", updateReferrerError)
-                        }
-                      } catch (updateError) {
-                        console.error("Exception updating referrer stats:", updateError)
-                      }
-                    }
-                  } catch (insertError) {
-                    console.error("Exception creating referral record:", insertError)
-                  }
-                } else {
-                  console.log("Referral already exists, skipping creation")
-                }
-              }
-            }
-          } catch (referralError) {
-            console.error("Error processing referral:", referralError)
-            // Non-blocking error - continue with registration
-          }
-        }
-
-        // Step 6: Update pioneer stats
-        // First, check if pioneer_stats_table has a record
-        const { data: existingStatsData, error: statsCheckError } = await supabaseAdmin
-          .from("pioneer_stats_table")
-          .select("*")
-          .single()
-
-        if (statsCheckError && statsCheckError.code !== "PGRST116") {
-          console.error("Error checking pioneer stats:", statsCheckError)
-        }
-
-        // If no record exists or there was an error, create/update the stats
-        if (!existingStatsData || statsCheckError) {
-          // Try to create a new record if none exists
-          const { error: insertStatsError } = await supabaseAdmin
-            .from("pioneer_stats_table")
-            .insert({
-              id: 1,
-              total_pioneers: 1,
-              genesis_pioneers: isGenesisPioneer ? 1 : 0
-            })
-            .onConflict("id")
-            .merge()
-
-          if (insertStatsError) {
-            console.error("Error creating pioneer stats:", insertStatsError)
-          }
-        } else {
-          // Update existing record
-          const { error: updateStatsError } = await supabaseAdmin
-            .from("pioneer_stats_table")
-            .update({
-              total_pioneers: existingStatsData.total_pioneers + 1,
-              genesis_pioneers: isGenesisPioneer 
-                ? existingStatsData.genesis_pioneers + 1 
-                : existingStatsData.genesis_pioneers
-            })
-            .eq("id", 1)
-
-          if (updateStatsError) {
-            console.error("Error updating pioneer stats:", updateStatsError)
-          }
-        }
-
-        return NextResponse.json(
-          {
-            message: "User created successfully",
-            pioneerNumber,
-            isGenesisPioneer
-          },
-          { status: 201 }
-        )
       } catch (error: any) {
-        console.error("Registration error:", error)
-        
-        // Try to clean up the auth user if profile creation failed
-        try {
-          await supabaseAdmin.auth.admin.deleteUser(userId)
-        } catch (cleanupError) {
-          console.error("Error cleaning up auth user after failed registration:", cleanupError)
-        }
-        
+        console.error("Unexpected error in registration process:", error)
         return NextResponse.json(
-          { error: error.message || "An unexpected error occurred during registration" },
+          { error: "Registration failed: " + error.message },
           { status: 500 }
         )
       }
