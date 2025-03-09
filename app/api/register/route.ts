@@ -269,6 +269,26 @@ export async function POST(request: Request) {
               referral_source: referralSource || null
             });
             
+            // If there's a referral code, look up the referrer ID first
+            let referrerId = null;
+            if (referralCode) {
+              try {
+                const { data: referrerData, error: referrerError } = await supabaseAdmin
+                  .from("profiles")
+                  .select("id")
+                  .eq("referral_code", referralCode)
+                  .single();
+                  
+                if (!referrerError && referrerData) {
+                  referrerId = referrerData.id;
+                  console.log(`Found referrer ID ${referrerId} for referral code ${referralCode}`);
+                }
+              } catch (referrerLookupError) {
+                console.error("Error looking up referrer ID:", referrerLookupError);
+                // Continue with registration even if referrer lookup fails
+              }
+            }
+            
             const { error: insertError } = await supabaseAdmin
               .from("profiles")
               .insert({
@@ -281,7 +301,8 @@ export async function POST(request: Request) {
                 email: email,
                 country: country,
                 referral_source: referralSource || null,
-                total_referrals: 0
+                total_referrals: 0,
+                referred_by: referrerId
               });
               
             if (insertError) {
@@ -384,6 +405,22 @@ export async function POST(request: Request) {
                         console.error("Error creating referral record:", createReferralError)
                         // Continue with registration even if referral creation fails
                       } else {
+                        // Update the referred_by column in the user's profile
+                        try {
+                          const { error: updateReferredByError } = await supabaseAdmin
+                            .from("profiles")
+                            .update({ referred_by: referrerData.id })
+                            .eq("id", userId)
+
+                          if (updateReferredByError) {
+                            console.error("Error updating referred_by field:", updateReferredByError)
+                          } else {
+                            console.log(`Successfully updated referred_by field for user ${userId} to referrer ${referrerData.id}`)
+                          }
+                        } catch (updateError) {
+                          console.error("Exception updating referred_by field:", updateError)
+                        }
+
                         // Only update the referrer's count if the referral was successfully created
                         try {
                           const newReferralCount = (referrerData.total_referrals || 0) + 1
