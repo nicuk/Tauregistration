@@ -280,7 +280,7 @@ export async function POST(request: Request) {
                   .single();
                   
                 if (!referrerError && referrerData) {
-                  referrerId = referrerData.id;
+                  referrerId = referrerData.id.toString(); // Convert UUID to string
                   console.log(`Found referrer ID ${referrerId} for referral code ${referralCode}`);
                 }
               } catch (referrerLookupError) {
