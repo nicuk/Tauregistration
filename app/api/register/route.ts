@@ -199,41 +199,48 @@ export async function POST(request: Request) {
       try {
         console.log("Creating user profile with pioneer number:", pioneerNumber);
         
-        // Try direct insert first as it's been confirmed to work correctly
+        // Try using the create_complete_user_profile function first as it handles all the logic
         try {
-          console.log("Attempting direct insert to profiles table");
-          const { error: insertError } = await supabaseAdmin
-            .from("profiles")
-            .insert({
-              id: userId,
-              username: finalUsername,
-              is_pi_user: isPiUser,
-              pioneer_number: pioneerNumber,
-              is_genesis_pioneer: isGenesisPioneer,
-              referral_code: generateUniqueReferralCode(finalUsername),
-              email: email,
-              country: country,
-              referral_source: referralSource || null,
-              total_referrals: 0
+          console.log("Attempting to use create_complete_user_profile function");
+          const { data, error: profileError } = await supabaseAdmin
+            .rpc('create_complete_user_profile', {
+              user_id: userId,
+              user_username: finalUsername,
+              user_is_pi: isPiUser,
+              user_referral_code: generateUniqueReferralCode(finalUsername),
+              user_email: email,
+              user_country: country,
+              user_referral_source: referralSource || null
             });
             
-          if (insertError) {
-            console.error("Direct insert failed:", insertError);
+          if (profileError) {
+            console.error("RPC failed. Error code:", profileError.code);
+            console.error("Error message:", profileError.message);
+            console.error("Error details:", profileError.details);
+            console.error("Full error object:", JSON.stringify(profileError, null, 2));
             
-            // Try RPC as fallback with the CORRECT function name
-            console.log("Direct insert failed, trying RPC as fallback");
-            const { data, error: profileError } = await supabaseAdmin
-              .rpc('create_user_profile_safe', {  
-                user_id: userId,
-                user_username: finalUsername,
-                user_is_pi: isPiUser,
-                user_pioneer_number: pioneerNumber,
-                user_is_genesis: isGenesisPioneer
+            // Try direct insert as fallback
+            console.log("RPC failed, trying direct insert as fallback");
+            const { error: insertError } = await supabaseAdmin
+              .from("profiles")
+              .insert({
+                id: userId,
+                username: finalUsername,
+                is_pi_user: isPiUser,
+                pioneer_number: pioneerNumber,
+                is_genesis_pioneer: isGenesisPioneer,
+                referral_code: generateUniqueReferralCode(finalUsername),
+                email: email,
+                country: country,
+                referral_source: referralSource || null,
+                total_referrals: 0
               });
               
-            if (profileError) {
-              console.error("RPC also failed:", profileError);
-              console.error("Profile creation error details:", JSON.stringify(profileError, null, 2));
+            if (insertError) {
+              console.error("Direct insert also failed. Error code:", insertError.code);
+              console.error("Error message:", insertError.message);
+              console.error("Error details:", insertError.details);
+              console.error("Full error object:", JSON.stringify(insertError, null, 2));
               
               // If profile creation fails, delete the auth user to maintain consistency
               try {
@@ -248,13 +255,13 @@ export async function POST(request: Request) {
                 { status: 500 }
               );
             } else {
-              console.log("Profile created successfully using RPC function");
+              console.log("Profile created successfully using direct insert");
             }
           } else {
-            console.log("Profile created successfully using direct insert");
+            console.log("Profile created successfully using RPC function");
           }
-        } catch (insertAttemptError) {
-          console.error("Error during profile creation attempt:", insertAttemptError);
+        } catch (profileCreationError) {
+          console.error("Error during profile creation attempt:", profileCreationError);
           
           // If profile creation fails, delete the auth user to maintain consistency
           try {
