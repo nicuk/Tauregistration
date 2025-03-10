@@ -288,7 +288,12 @@ export async function POST(request: Request) {
               country: country,
               referral_source: referralSource || null,
               total_referrals: 0,
-              referred_by: referrerId
+              referred_by: referrerId,
+              email_verified: false,
+              twitter_verified: false,
+              telegram_verified: false,
+              twitter_shared: false,
+              first_referral: false
             });
             
             const { error: insertError } = await supabaseAdmin
@@ -304,7 +309,12 @@ export async function POST(request: Request) {
                 country: country,
                 referral_source: referralSource || null,
                 total_referrals: 0,
-                referred_by: referrerId
+                referred_by: referrerId,
+                email_verified: false,
+                twitter_verified: false,
+                telegram_verified: false,
+                twitter_shared: false,
+                first_referral: false
               });
               
             if (insertError) {
