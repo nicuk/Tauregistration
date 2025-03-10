@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     // Get all referrals and check their verification status
     const { data: referrals, error: referralsError } = await supabaseAdmin
       .from("profiles")
-      .select("id, twitter_verified, telegram_verified, twitter_shared, first_referral")
+      .select("id, email, twitter_verified, telegram_verified, twitter_shared, first_referral, created_at")
       .eq("referred_by", profile.referral_code);
 
     if (referralsError) {
@@ -98,41 +98,100 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to fetch referrals" }, { status: 500 });
     }
 
-    // Count fully verified referrals (all 4 steps completed)
-    const verifiedReferrals = referrals.filter(ref => 
-      ref.twitter_verified && ref.telegram_verified && ref.twitter_shared && ref.first_referral
-    ).length;
+    // Calculate verification stats for each referral
+    interface ReferralDetails {
+      id: string;
+      steps: boolean[];
+      completedSteps: number;
+      completionPercentage: number;
+      unlockedTAU: number;
+      created_at: string;
+    }
+
+    const referralDetails: ReferralDetails[] = referrals.map((ref: any) => {
+      // Check which verification steps are completed
+      const emailVerified = ref.email && ref.email.length > 0; // Assuming email presence means verified
+      const steps = [
+        emailVerified,                // Email verification (20%)
+        ref.twitter_verified || false, // Twitter verification (20%)
+        ref.telegram_verified || false, // Telegram verification (20%)
+        ref.twitter_shared || false,   // Twitter sharing (20%)
+        ref.first_referral || false    // First referral (20%)
+      ];
+      
+      // Count completed steps
+      const completedSteps = steps.filter(Boolean).length;
+      
+      // Calculate completion percentage and unlocked TAU
+      const completionPercentage = (completedSteps / 5) * 100;
+      const unlockedTAU = Math.round((completionPercentage / 100) * 10000);
+      
+      return {
+        id: ref.id,
+        steps,
+        completedSteps,
+        completionPercentage,
+        unlockedTAU,
+        created_at: ref.created_at
+      };
+    });
+
+    // Count fully verified referrals (all 5 steps completed)
+    const verifiedReferrals = referralDetails.filter((ref: ReferralDetails) => ref.completedSteps === 5).length;
 
     // Count partially verified referrals (at least one step completed)
-    const activeReferrals = referrals.filter(ref => 
-      ref.twitter_verified || ref.telegram_verified || ref.twitter_shared || ref.first_referral
-    ).length;
+    const activeReferrals = referralDetails.filter((ref: ReferralDetails) => ref.completedSteps > 0).length;
+
+    // Calculate overall completion percentage across all referrals
+    const overallCompletionPercentage = referralDetails.length > 0 
+      ? referralDetails.reduce((sum: number, ref: ReferralDetails) => sum + ref.completionPercentage, 0) / referralDetails.length 
+      : 0;
+
+    // Calculate total unlocked TAU from all referrals
+    const totalUnlockedTAU = referralDetails.reduce((sum: number, ref: ReferralDetails) => sum + ref.unlockedTAU, 0);
 
     // Determine current tier based on verified referral count
     const tiers = [
-      { tier: 1, required: 1 },
-      { tier: 2, required: 3 },
-      { tier: 3, required: 6 },
-      { tier: 4, required: 12 },
-      { tier: 5, required: 25 },
-      { tier: 6, required: 50 },
-      { tier: 7, required: 100 },
+      { tier: 1, required: 1, name: "Community Founder", reward: 10000 },
+      { tier: 2, required: 3, name: "Community Builder", reward: 25000 },
+      { tier: 3, required: 6, name: "Community Leader", reward: 45000 },
+      { tier: 4, required: 12, name: "Community Champion", reward: 100000 },
+      { tier: 5, required: 25, name: "Community Visionary", reward: 250000 },
+      { tier: 6, required: 50, name: "Community Luminary", reward: 500000 },
+      { tier: 7, required: 100, name: "Community Legend", reward: 1000000 },
     ];
 
     // Use verified referrals for tier determination
-    const currentTier = tiers.findIndex((t) => t.required > verifiedReferrals);
-    const tier = currentTier === -1 ? 7 : currentTier;
-    const nextTier = tier < 7 ? tier + 1 : 7;
+    const currentTierIndex = tiers.findIndex((t) => t.required > verifiedReferrals);
+    const tierIndex = currentTierIndex === -1 ? 6 : currentTierIndex - 1; // Adjust for zero-based index
+    const currentTier = tierIndex >= 0 ? tierIndex + 1 : 0;
+    const nextTier = currentTier < 7 ? currentTier + 1 : 7;
+
+    // Get current and next tier data
+    const currentTierData = currentTier > 0 ? tiers[currentTier - 1] : { tier: 0, required: 0, name: "", reward: 0 };
+    const nextTierData = nextTier > 0 ? tiers[nextTier - 1] : currentTierData;
 
     // Calculate earnings based on tier
-    const tierRewards = [10000, 25000, 45000, 100000, 250000, 500000, 1000000];
-    const totalEarnings = tier > 0 ? tierRewards[tier - 1] : 0;
-    const pendingRewards = totalEarnings;
+    const tierReward = currentTier > 0 ? currentTierData.reward : 0;
+    const maxTierReward = tiers[6].reward; // Tier 7 reward (1,000,000 TAU)
+
+    // Calculate unlocked percentage based on maximum possible reward
+    const unlockedPercentage = (tierReward / maxTierReward) * 100;
 
     // Calculate progress to next tier
-    const currentThreshold = tier > 0 ? tiers[tier - 1].required : 0;
-    const nextThreshold = tier < 7 ? tiers[tier].required : tiers[6].required;
+    const currentThreshold = currentTier > 0 ? currentTierData.required : 0;
+    const nextThreshold = nextTier > 0 ? nextTierData.required : tiers[0].required;
     const progressToNextTier = ((verifiedReferrals - currentThreshold) / (nextThreshold - currentThreshold)) * 100;
+
+    // Calculate referrals needed for next tier
+    const referralsNeeded = Math.max(0, nextThreshold - verifiedReferrals);
+
+    // Calculate pending rewards (next tier reward - current tier reward)
+    const pendingTierReward = nextTierData.reward - tierReward;
+
+    // Calculate total pending rewards (tier progression + incomplete referrals)
+    const incompleteTAU = referralDetails.reduce((sum: number, ref: ReferralDetails) => sum + (10000 - ref.unlockedTAU), 0);
+    const pendingRewards = pendingTierReward + incompleteTAU;
 
     if (existingStats) {
       // Update existing stats
@@ -142,11 +201,17 @@ export async function POST(request: Request) {
           total_referrals: newReferralCount,
           active_referrals: activeReferrals,
           verified_referrals: verifiedReferrals,
-          current_tier: tier,
+          current_tier: currentTier,
           next_tier: nextTier,
           current_tier_progress: progressToNextTier,
-          total_earnings: totalEarnings,
+          current_tier_name: currentTierData.name,
+          next_tier_name: nextTierData.name,
+          overall_completion_percentage: overallCompletionPercentage,
+          total_earnings: tierReward,
+          unlocked_percentage: unlockedPercentage,
           pending_rewards: pendingRewards,
+          unlocked_rewards: tierReward + totalUnlockedTAU,
+          referral_details: JSON.stringify(referralDetails),
           updated_at: new Date(),
         })
         .eq("user_id", referrerProfile.id);
@@ -172,12 +237,17 @@ export async function POST(request: Request) {
           tier_5_referrals: verifiedReferrals >= 25 ? 1 : 0,
           tier_6_referrals: verifiedReferrals >= 50 ? 1 : 0,
           tier_7_referrals: verifiedReferrals >= 100 ? 1 : 0,
-          current_tier: tier,
+          current_tier: currentTier,
           next_tier: nextTier,
           current_tier_progress: progressToNextTier,
-          total_earnings: totalEarnings,
-          claimed_rewards: 0,
+          current_tier_name: currentTierData.name,
+          next_tier_name: nextTierData.name,
+          overall_completion_percentage: overallCompletionPercentage,
+          total_earnings: tierReward,
+          unlocked_percentage: unlockedPercentage,
           pending_rewards: pendingRewards,
+          unlocked_rewards: tierReward + totalUnlockedTAU,
+          referral_details: JSON.stringify(referralDetails),
         });
 
       if (insertStatsError) {
@@ -225,9 +295,13 @@ export async function POST(request: Request) {
       message: "Referral stats updated successfully",
       referrerId: referrerProfile.id,
       totalReferrals: newReferralCount,
-      tier,
-      nextTier,
-      totalEarnings
+      tier: currentTier,
+      nextTier: nextTier,
+      totalEarnings: tierReward,
+      unlockedPercentage: unlockedPercentage,
+      pendingRewards: pendingRewards,
+      unlockedRewards: tierReward + totalUnlockedTAU,
+      referralDetails: referralDetails,
     });
   } catch (error: any) {
     console.error("Error processing referral stats:", error);

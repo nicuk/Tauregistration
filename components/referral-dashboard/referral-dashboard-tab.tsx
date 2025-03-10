@@ -16,20 +16,25 @@ interface ReferralStats {
   user_id: string
   total_referrals: number
   verified_referrals: number
+  active_referrals: number
   rank: number
   total_earnings: number
   claimed_rewards: number
   pending_rewards: number
+  unlocked_rewards: number
   current_tier: number
   next_tier: number
   current_tier_progress: number
+  current_tier_name: string
+  next_tier_name: string
+  overall_completion_percentage: number
+  unlocked_percentage: number
   top_referrers: any[]
   progress_to_next_tier: number
   next_tier_reward: number
   referrals_needed: number
   total_users: number
-  current_tier_name: string
-  unlocked_percentage: number
+  referral_details: string
 }
 
 interface ReferredUser {
@@ -38,10 +43,12 @@ interface ReferredUser {
   completionPercentage: number
   unlockedTAU: number
   formattedDate: string
+  email_verified: boolean
   twitter_verified: boolean
   telegram_verified: boolean
   twitter_shared: boolean
   first_referral: boolean
+  steps: boolean[]
   created_at: string
 }
 
@@ -56,20 +63,25 @@ export function ReferralDashboardTab({ user, profile }) {
   const [stats, setStats] = useState<ReferralStats>({
     total_referrals: 0,
     verified_referrals: 0,
+    active_referrals: 0,
     rank: 0,
     total_earnings: 0,
     claimed_rewards: 0,
     pending_rewards: 0,
+    unlocked_rewards: 0,
     current_tier: 0,
     next_tier: 1,
     current_tier_progress: 0,
+    current_tier_name: "",
+    next_tier_name: "",
+    overall_completion_percentage: 0,
+    unlocked_percentage: 0,
     top_referrers: [],
     progress_to_next_tier: 0,
     next_tier_reward: 10000,
     referrals_needed: 1,
     total_users: 0,
-    current_tier_name: "",
-    unlocked_percentage: 0
+    referral_details: ""
   })
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -87,112 +99,109 @@ export function ReferralDashboardTab({ user, profile }) {
     try {
       setLoading(true)
       
-      // Get the user's referral stats
-      const { data, error } = await supabase.from("referral_stats").select("*").eq("user_id", user.id).single()
-      
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching referral stats:", error)
-        // If there's an error other than "not found", show it
-        setErrorMessage(error.message)
-        return
-      }
-      
-      if (!data) {
-        // If no stats found, call the sync API to create them
-        await syncReferralStats()
-        return
-      }
-      
-      // Calculate progress to next tier
-      const tiers: TierInfo[] = [
-        { tier: 1, required: 1, reward: 10000, name: "Community Founder" },
-        { tier: 2, required: 3, reward: 25000, name: "Community Builder" },
-        { tier: 3, required: 6, reward: 45000, name: "Community Leader" },
-        { tier: 4, required: 12, reward: 100000, name: "TAU Pioneer" },
-        { tier: 5, required: 25, reward: 250000, name: "TAU Ambassador" },
-        { tier: 6, required: 50, reward: 500000, name: "TAU Evangelist" },
-        { tier: 7, required: 100, reward: 1000000, name: "TAU Legend" }
-      ]
-      
-      // Use verified_referrals for tier calculation
-      const currentTier = data.current_tier || 0
-      const nextTier = data.next_tier || 1
-      const nextTierData = tiers[nextTier - 1]
-      const currentTierData = currentTier > 0 ? tiers[currentTier - 1] : { required: 0, reward: 0, name: "" }
-      
-      // Calculate progress percentage to next tier
-      const progressToNextTier = data.current_tier_progress || 0
-      
-      // Calculate referrals needed for next tier
-      const referralsNeeded = nextTierData.required - (data.verified_referrals || 0)
-      
-      // Get the reward for the next tier
-      const nextTierReward = nextTierData.reward
-      
-      // Calculate unlocked percentage (current tier reward / max tier reward)
-      const maxTierReward = tiers[6].reward // 1,000,000 TAU
-      const currentTierReward = currentTierData.reward
-      const unlockedPercentage = Math.round((currentTierReward / maxTierReward) * 100)
-      
-      // Get top referrers for the leaderboard
-      const { data: topReferrers, error: topReferrersError } = await supabase
+      // Get referral stats for this user
+      const { data: statsData, error: statsError } = await supabase
         .from("referral_stats")
-        .select("user_id, total_referrals, rank")
-        .order("total_referrals", { ascending: false })
-        .limit(10)
-      
-      if (topReferrersError) {
-        console.error("Error fetching top referrers:", topReferrersError)
+        .select("*")
+        .eq("user_id", user.id)
+        .single()
+
+      if (statsError) {
+        console.error("Error fetching referral stats:", statsError)
+        
+        // If no stats found, trigger sync to create them
+        if (statsError.code === "PGRST116") {
+          await syncReferralStats()
+          return
+        }
       }
-      
-      const topReferrersWithUsernames: Array<{
-        id: string;
-        username: string;
-        earnings: number;
-        badge: string | null;
-      }> = []
-      
-      if (topReferrers && topReferrers.length > 0) {
-        for (const referrer of topReferrers) {
-          const { data: userData, error: userError } = await supabase
+
+      if (statsData) {
+        // Get top referrers with usernames
+        const { data: topReferrers, error: topReferrersError } = await supabase
+          .from("referral_stats")
+          .select("user_id, total_referrals, total_earnings, unlocked_rewards")
+          .order("total_referrals", { ascending: false })
+          .limit(10)
+
+        if (topReferrersError) {
+          console.error("Error fetching top referrers:", topReferrersError)
+        }
+
+        // Get usernames for top referrers
+        let topReferrersWithUsernames = []
+        if (topReferrers && topReferrers.length > 0) {
+          const userIds = topReferrers.map((referrer: { user_id: string }) => referrer.user_id)
+          const { data: profiles, error: profilesError } = await supabase
             .from("profiles")
-            .select("username")
-            .eq("id", referrer.user_id)
-            .single()
-            
-          if (!userError && userData) {
-            topReferrersWithUsernames.push({
-              id: referrer.user_id,
-              username: userData.username || 'Anonymous',
-              earnings: referrer.total_referrals * 1000, // Simple calculation for display
-              badge: referrer.rank <= 3 ? ['Genesis', 'Pioneer', 'Early Adopter'][referrer.rank - 1] : null
+            .select("id, username")
+            .in("id", userIds)
+
+          if (profilesError) {
+            console.error("Error fetching profiles for top referrers:", profilesError)
+          }
+
+          if (profiles) {
+            topReferrersWithUsernames = topReferrers.map((referrer: { user_id: string, total_referrals: number, unlocked_rewards: number | null }) => {
+              const profile = profiles.find((p: { id: string, username: string }) => p.id === referrer.user_id)
+              return {
+                id: referrer.user_id,
+                username: profile?.username || "Anonymous",
+                referrals: referrer.total_referrals,
+                earnings: referrer.unlocked_rewards || 0
+              }
             })
           }
         }
+
+        // Determine current tier and next tier
+        const tiers = [
+          { tier: 1, required: 1, reward: 10000, name: "Community Founder" },
+          { tier: 2, required: 3, reward: 25000, name: "Community Builder" },
+          { tier: 3, required: 6, reward: 45000, name: "Community Leader" },
+          { tier: 4, required: 12, reward: 100000, name: "Community Champion" },
+          { tier: 5, required: 25, reward: 250000, name: "Community Visionary" },
+          { tier: 6, required: 50, reward: 500000, name: "Community Luminary" },
+          { tier: 7, required: 100, reward: 1000000, name: "Community Legend" }
+        ]
+
+        // Use verified referrals for tier determination
+        const verifiedReferrals = statsData.verified_referrals || 0
+        const currentTierIndex = tiers.findIndex((t) => t.required > verifiedReferrals)
+        const tierIndex = currentTierIndex === -1 ? 6 : currentTierIndex - 1
+        const currentTier = tierIndex >= 0 ? tierIndex + 1 : 0
+        const nextTier = currentTier < 7 ? currentTier + 1 : 7
+
+        // Get current and next tier data
+        const currentTierData = currentTier > 0 ? tiers[currentTier - 1] : { tier: 0, required: 0, name: "", reward: 0 }
+        const nextTierData = nextTier > 0 ? tiers[nextTier - 1] : currentTierData
+
+        // Calculate referrals needed for next tier
+        const nextThreshold = nextTier > 0 ? nextTierData.required : tiers[0].required
+        const referralsNeeded = Math.max(0, nextThreshold - verifiedReferrals)
+
+        // Update stats state
+        setStats({
+          ...statsData,
+          top_referrers: topReferrersWithUsernames,
+          referrals_needed: referralsNeeded,
+          current_tier_name: statsData.current_tier_name || currentTierData.name,
+          next_tier_name: statsData.next_tier_name || nextTierData.name
+        })
       }
-      
-      setStats({
-        ...data,
-        progress_to_next_tier: progressToNextTier,
-        next_tier_reward: nextTierReward,
-        referrals_needed: referralsNeeded,
-        top_referrers: topReferrersWithUsernames,
-        current_tier_name: currentTierData.name || "",
-        unlocked_percentage: unlockedPercentage
-      })
     } catch (error) {
       console.error("Error in fetchReferralStats:", error)
     } finally {
       setLoading(false)
     }
   }
-  
+
   const fetchReferredUsers = async () => {
     try {
       // Get users referred by this user
       const { data: referrals, error: referralsError } = await supabase
         .from("profiles")
-        .select("id, username, twitter_verified, telegram_verified, twitter_shared, first_referral, created_at")
+        .select("id, username, email, twitter_verified, telegram_verified, twitter_shared, first_referral, created_at")
         .eq("referred_by", profile.referral_code)
         .order("created_at", { ascending: false })
 
@@ -204,18 +213,27 @@ export function ReferralDashboardTab({ user, profile }) {
       if (referrals && referrals.length > 0) {
         // Calculate completion percentage and unlocked TAU for each referral
         const processedReferrals = referrals.map((referral: any): ReferredUser => {
-          const stepsCompleted = [
-            referral.twitter_verified,
-            referral.telegram_verified,
-            referral.twitter_shared,
-            referral.first_referral
-          ].filter(Boolean).length
+          // Check which verification steps are completed
+          const emailVerified = referral.email && referral.email.length > 0
+          const steps = [
+            emailVerified,                // Email verification (20%)
+            referral.twitter_verified || false, // Twitter verification (20%)
+            referral.telegram_verified || false, // Telegram verification (20%)
+            referral.twitter_shared || false,   // Twitter sharing (20%)
+            referral.first_referral || false    // First referral (20%)
+          ]
           
-          const completionPercentage = (stepsCompleted / 4) * 100
+          // Count completed steps
+          const completedSteps = steps.filter(Boolean).length
+          
+          // Calculate completion percentage and unlocked TAU (20% per step)
+          const completionPercentage = (completedSteps / 5) * 100
           const unlockedTAU = Math.round((completionPercentage / 100) * 10000)
           
           return {
             ...referral,
+            email_verified: emailVerified,
+            steps,
             completionPercentage,
             unlockedTAU,
             formattedDate: new Date(referral.created_at).toLocaleDateString()
@@ -231,32 +249,31 @@ export function ReferralDashboardTab({ user, profile }) {
   
   const syncReferralStats = async () => {
     try {
-      // Call the sync-referral-for-user API to create/update stats
-      const response = await fetch(`/api/sync-referral-for-user?userId=${user.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
+      setLoading(true)
       
-      if (response.ok) {
-        // Fetch the updated stats
-        const { data, error } = await supabase.from("referral_stats").select("*").eq("user_id", user.id).single()
-        
-        if (!error && data) {
-          setStats({
-            ...data,
-            progress_to_next_tier: 0,
-            next_tier_reward: 10000,
-            referrals_needed: 1,
-            top_referrers: []
-          })
-        }
-      } else {
-        console.error("Failed to sync referral stats:", await response.text())
+      const response = await fetch("/api/sync-referral-for-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ userId: user.id })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("Error syncing referral stats:", errorData)
+        return
       }
+
+      const data = await response.json()
+      console.log("Referral stats synced:", data)
+      
+      // Fetch updated stats after sync
+      await fetchReferralStats()
     } catch (error) {
-      console.error("Error syncing referral stats:", error)
+      console.error("Error in syncReferralStats:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -285,7 +302,12 @@ Join me with my referral link: ${referralLink}
 
   return (
     <div className="space-y-6">
-      <TotalEarningsCard claimed={stats.claimed_rewards || 0} pending={stats.pending_rewards || 0} />
+      <TotalEarningsCard
+        totalEarnings={stats.total_earnings}
+        unlockedEarnings={stats.unlocked_rewards || 0}
+        pendingEarnings={stats.pending_rewards || 0}
+        unlockedPercentage={stats.unlocked_percentage || 0}
+      />
 
       {/* Share Section */}
       <Card>
@@ -320,33 +342,39 @@ Join me with my referral link: ${referralLink}
           <div className="mb-4">
             <div className="flex items-center space-x-2 mb-2">
               <Trophy className="h-5 w-5 text-primary" />
-              <span className="font-semibold">{stats.current_tier_name}</span>
+              <span className="font-semibold">Tier {stats.current_tier}: {stats.current_tier_name}</span>
             </div>
-            <p className="text-2xl font-bold">{stats.next_tier_reward.toLocaleString()} TAU</p>
+            <p className="text-2xl font-bold">{stats.total_earnings.toLocaleString()} TAU</p>
             <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm inline-block mt-2">
-              {stats.unlocked_percentage}% Unlocked
+              {stats.unlocked_percentage.toFixed(1)}% of Maximum Reward Unlocked
             </div>
           </div>
           
           <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${stats.progress_to_next_tier}%` }}
+              animate={{ width: `${stats.current_tier_progress}%` }}
               className="h-full bg-primary rounded-full"
             />
           </div>
           
           <div className="mt-2 text-sm text-right">
-            {stats.total_referrals || 0}/{stats.next_tier_reward === 10000 ? 1 : stats.next_tier_reward === 25000 ? 3 : stats.next_tier_reward === 45000 ? 6 : stats.next_tier_reward === 100000 ? 12 : stats.next_tier_reward === 250000 ? 25 : stats.next_tier_reward === 500000 ? 50 : 100} completed
+            {stats.verified_referrals || 0}/{stats.next_tier > 0 ? 
+              (stats.next_tier === 1 ? 1 : 
+               stats.next_tier === 2 ? 3 : 
+               stats.next_tier === 3 ? 6 : 
+               stats.next_tier === 4 ? 12 : 
+               stats.next_tier === 5 ? 25 : 
+               stats.next_tier === 6 ? 50 : 100) : 1} verified referrals
           </div>
           
           <p className="mt-4 text-center text-lg">
             {stats.referrals_needed > 0 ? (
               <>
-                {stats.referrals_needed} more {stats.referrals_needed === 1 ? 'referral' : 'referrals'} to reach this tier
+                {stats.referrals_needed} more verified {stats.referrals_needed === 1 ? 'referral' : 'referrals'} to reach Tier {stats.next_tier}: {stats.next_tier_name}
               </>
             ) : (
-              <>Tier completed!</>
+              <>Tier {stats.current_tier} completed! You've reached the highest milestone.</>
             )}
           </p>
           
@@ -384,9 +412,28 @@ Join me with my referral link: ${referralLink}
                           className="h-full bg-primary rounded-full"
                         />
                       </div>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-sm mb-3">
                         <span>{referral.completionPercentage}% Complete</span>
                         <span>{referral.unlockedTAU.toLocaleString()} TAU unlocked</span>
+                      </div>
+                      
+                      {/* Verification Steps */}
+                      <div className="grid grid-cols-5 gap-2 mt-2">
+                        <div className={`text-xs p-1 text-center rounded ${referral.steps[0] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                          Email
+                        </div>
+                        <div className={`text-xs p-1 text-center rounded ${referral.steps[1] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                          Twitter
+                        </div>
+                        <div className={`text-xs p-1 text-center rounded ${referral.steps[2] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                          Telegram
+                        </div>
+                        <div className={`text-xs p-1 text-center rounded ${referral.steps[3] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                          Share
+                        </div>
+                        <div className={`text-xs p-1 text-center rounded ${referral.steps[4] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                          Refer
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -411,8 +458,8 @@ Join me with my referral link: ${referralLink}
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>
-                    Verification progress shows the percentage of your referrals who have completed all verification
-                    steps
+                    Statistics show your total referrals, verified referrals, and current rank.
+                    Verified referrals have completed all 5 verification steps.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -420,13 +467,20 @@ Join me with my referral link: ${referralLink}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="bg-muted p-4 rounded-lg">
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4" />
                 <span>Total Referrals</span>
               </div>
               <p className="text-2xl font-bold mt-2">{stats.total_referrals || 0}</p>
+            </div>
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Users className="h-4 w-4 text-green-500" />
+                <span>Verified</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">{stats.verified_referrals || 0}</p>
             </div>
             <div className="bg-muted p-4 rounded-lg">
               <div className="flex items-center space-x-2">
@@ -448,23 +502,22 @@ Join me with my referral link: ${referralLink}
           <div>
             <div className="flex justify-between mb-2">
               <span>Overall Progress</span>
-              <span>{stats.verified_referrals && stats.total_referrals ? 
-                ((stats.verified_referrals / stats.total_referrals) * 100).toFixed(1) : 
+              <span>{stats.overall_completion_percentage ? 
+                stats.overall_completion_percentage.toFixed(1) : 
                 "0.0"}%</span>
             </div>
             <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ 
-                  width: `${stats.verified_referrals && stats.total_referrals ? 
-                    ((stats.verified_referrals / stats.total_referrals) * 100) : 0}%` 
+                  width: `${stats.overall_completion_percentage || 0}%` 
                 }}
                 className="h-full bg-primary rounded-full"
               />
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              {stats.verified_referrals || 0} referrals have completed {stats.verified_referrals && stats.total_referrals ? 
-                ((stats.verified_referrals / stats.total_referrals) * 100).toFixed(1) : 
+              {referredUsers.length} referrals have completed an average of {stats.overall_completion_percentage ? 
+                stats.overall_completion_percentage.toFixed(1) : 
                 "0.0"}% of all verification steps
             </p>
           </div>
@@ -478,24 +531,25 @@ Join me with my referral link: ${referralLink}
         </CardHeader>
         <CardContent>
           {stats.top_referrers && stats.top_referrers.length > 0 ? (
-            stats.top_referrers.map((referrer, index) => (
-              <motion.div
-                key={referrer.id || index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex items-center justify-between p-4 border-b last:border-0"
-              >
-                <div className="flex items-center space-x-3">
-                  {index === 0 && <Trophy className="h-5 w-5 text-yellow-500" />}
-                  <span className="font-medium">{referrer.username || 'Anonymous'}</span>
-                  {referrer.badge && (
-                    <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">{referrer.badge}</span>
-                  )}
-                </div>
-                <span className="text-primary">{(referrer.earnings || 0).toLocaleString()} TAU</span>
-              </motion.div>
-            ))
+            <div className="space-y-3">
+              {stats.top_referrers.map((referrer, index) => (
+                <motion.div
+                  key={referrer.id || index}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`flex items-center justify-between p-3 rounded-lg ${index === 0 ? 'bg-yellow-50' : index === 1 ? 'bg-gray-50' : index === 2 ? 'bg-amber-50' : 'bg-muted/30'}`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 text-center font-bold">
+                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                    </div>
+                    <span className="font-medium">{referrer.username || 'Anonymous'}</span>
+                  </div>
+                  <span className="text-primary font-semibold">{(referrer.earnings || 0).toLocaleString()} TAU</span>
+                </motion.div>
+              ))}
+            </div>
           ) : (
             <div className="text-center py-6 text-muted-foreground">
               No referrals data available yet. Be the first to climb the leaderboard!
