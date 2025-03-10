@@ -412,37 +412,44 @@ export async function POST(request: Request) {
                       
                     if (updateReferredByError) {
                       console.error("Error updating referred_by field with referral code:", updateReferredByError);
-                      console.error("Error code:", updateReferredByError.code);
-                      console.error("Error message:", updateReferredByError.message);
-                      console.error("Error details:", updateReferredByError.details);
                     } else {
                       console.log(`Successfully updated referred_by field for user ${userId} to referral code ${matchedReferrer.referral_code}`);
                       
                       // 2. Create a referral record with BOTH USER IDs (as UUIDs)
-                      const { error: createReferralError } = await supabaseAdmin
-                        .from("referrals")
-                        .insert({
-                          referrer_id: matchedReferrer.id, // This is a UUID
-                          referred_id: userId              // This is a UUID
-                        });
+                      try {
+                        const { error: createReferralError } = await supabaseAdmin
+                          .from("referrals")
+                          .insert({
+                            referrer_id: matchedReferrer.id, // This is a UUID
+                            referred_id: userId              // This is a UUID
+                          });
 
-                      if (createReferralError) {
-                        console.error("Error creating referral record:", createReferralError);
-                      } else {
-                        console.log("Successfully created referral record");
-                        
-                        // Update the referrer's total_referrals count
-                        const newReferralCount = (matchedReferrer.total_referrals || 0) + 1;
-                        const { error: updateReferrerError } = await supabaseAdmin
-                          .from("profiles")
-                          .update({ total_referrals: newReferralCount })
-                          .eq("id", matchedReferrer.id);
-                          
-                        if (updateReferrerError) {
-                          console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                        if (createReferralError) {
+                          console.error("Error creating referral record:", createReferralError);
                         } else {
-                          console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                          console.log("Successfully created referral record");
+                          
+                          // 3. Update the referrer's total_referrals count
+                          try {
+                            const newReferralCount = (matchedReferrer.total_referrals || 0) + 1;
+                            const { error: updateReferrerError } = await supabaseAdmin
+                              .from("profiles")
+                              .update({ total_referrals: newReferralCount })
+                              .eq("id", matchedReferrer.id);
+                              
+                            if (updateReferrerError) {
+                              console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                            } else {
+                              console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                            }
+                          } catch (updateReferrerError) {
+                            console.error("Exception updating referrer's total_referrals:", updateReferrerError);
+                            // Continue despite this error
+                          }
                         }
+                      } catch (createReferralError) {
+                        console.error("Exception creating referral record:", createReferralError);
+                        // Continue despite this error
                       }
                     }
                   } else {
@@ -464,37 +471,44 @@ export async function POST(request: Request) {
                     
                   if (updateReferredByError) {
                     console.error("Error updating referred_by field with referral code:", updateReferredByError);
-                    console.error("Error code:", updateReferredByError.code);
-                    console.error("Error message:", updateReferredByError.message);
-                    console.error("Error details:", updateReferredByError.details);
                   } else {
                     console.log(`Successfully updated referred_by field for user ${userId} to referral code ${referrerData.referral_code}`);
                     
                     // 2. Create a referral record with BOTH USER IDs (as UUIDs)
-                    const { error: createReferralError } = await supabaseAdmin
-                      .from("referrals")
-                      .insert({
-                        referrer_id: referrerData.id, // This is a UUID
-                        referred_id: userId           // This is a UUID
-                      });
+                    try {
+                      const { error: createReferralError } = await supabaseAdmin
+                        .from("referrals")
+                        .insert({
+                          referrer_id: referrerData.id, // This is a UUID
+                          referred_id: userId           // This is a UUID
+                        });
 
-                    if (createReferralError) {
-                      console.error("Error creating referral record:", createReferralError);
-                    } else {
-                      console.log("Successfully created referral record");
-                      
-                      // Update the referrer's total_referrals count
-                      const newReferralCount = (referrerData.total_referrals || 0) + 1;
-                      const { error: updateReferrerError } = await supabaseAdmin
-                        .from("profiles")
-                        .update({ total_referrals: newReferralCount })
-                        .eq("id", referrerData.id);
-                        
-                      if (updateReferrerError) {
-                        console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                      if (createReferralError) {
+                        console.error("Error creating referral record:", createReferralError);
                       } else {
-                        console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                        console.log("Successfully created referral record");
+                        
+                        // 3. Update the referrer's total_referrals count
+                        try {
+                          const newReferralCount = (referrerData.total_referrals || 0) + 1;
+                          const { error: updateReferrerError } = await supabaseAdmin
+                            .from("profiles")
+                            .update({ total_referrals: newReferralCount })
+                            .eq("id", referrerData.id);
+                            
+                          if (updateReferrerError) {
+                            console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                          } else {
+                            console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                          }
+                        } catch (updateReferrerError) {
+                          console.error("Exception updating referrer's total_referrals:", updateReferrerError);
+                          // Continue despite this error
+                        }
                       }
+                    } catch (createReferralError) {
+                      console.error("Exception creating referral record:", createReferralError);
+                      // Continue despite this error
                     }
                   }
                 }
