@@ -272,11 +272,36 @@ export async function POST(request: Request) {
         // Update rank for the referrer
         const referrerIndex = allStats.findIndex((stat: any) => stat.user_id === referrerProfile.id);
         if (referrerIndex !== -1) {
+          // Fetch top 10 referrers with their usernames and earnings
+          const { data: topReferrers, error: topReferrersError } = await supabaseAdmin
+            .from("referral_stats")
+            .select(`
+              user_id,
+              total_referrals,
+              unlocked_rewards,
+              profiles:user_id(username)
+            `)
+            .order("total_referrals", { ascending: false })
+            .limit(10);
+
+          if (topReferrersError) {
+            console.error("Error fetching top referrers:", topReferrersError);
+          }
+
+          // Format top referrers data
+          const formattedTopReferrers = topReferrers ? topReferrers.map((referrer: any) => ({
+            id: referrer.user_id,
+            username: referrer.profiles?.username || 'Anonymous',
+            referrals: referrer.total_referrals,
+            earnings: referrer.unlocked_rewards
+          })) : [];
+
           const { error: rankError } = await supabaseAdmin
             .from("referral_stats")
             .update({
               rank: referrerIndex + 1,
-              total_users: allStats.length
+              total_users: allStats.length,
+              top_referrers: formattedTopReferrers
             })
             .eq("user_id", referrerProfile.id);
 

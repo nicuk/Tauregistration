@@ -21,13 +21,20 @@ export const metadata = {
         type: "image/png",
       },
     ],
+    shortcut: "/tau-logo.png",
     apple: {
       url: "/tau-logo.png",
       sizes: "180x180",
       type: "image/png",
     },
+    other: [
+      {
+        rel: "icon",
+        url: "/tau-logo.png",
+      },
+    ],
   },
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
