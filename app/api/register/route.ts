@@ -232,18 +232,17 @@ export async function POST(request: Request) {
             
             // Call our fixed SQL function
             const { data: profileResult, error: profileError } = await supabaseAdmin.rpc(
-              'create_complete_user_profile',
+              'api_register_user',
               {
-                user_id: userId,
-                username: finalUsername,
                 email: email,
+                username: finalUsername,
                 is_pi_user: isPiUser,
                 referral_code: referralCode
               }
             );
             
             if (profileError) {
-              console.error("Error calling create_complete_user_profile function:", profileError);
+              console.error("Error calling api_register_user function:", profileError);
               console.error("Error code:", profileError.code);
               console.error("Error message:", profileError.message);
               console.error("Error details:", profileError.details);
@@ -271,7 +270,7 @@ export async function POST(request: Request) {
               }
             }
           } catch (functionError) {
-            console.error("Exception calling create_complete_user_profile function:", functionError);
+            console.error("Exception calling api_register_user function:", functionError);
             console.log("Falling back to direct insert method...");
             // Continue to the direct insert method below
           }
@@ -351,7 +350,7 @@ export async function POST(request: Request) {
             is_pi_user: isPiUser,
             pioneer_number: nextPioneerNumber,
             is_genesis_pioneer: isGenesisPioneer,
-            referral_code: generateUniqueReferralCode(finalUsername),
+            referral_code: userReferralCode,
             email: email,
             country: country,
             referral_source: referralSource || null,
@@ -372,7 +371,7 @@ export async function POST(request: Request) {
               is_pi_user: isPiUser,
               pioneer_number: nextPioneerNumber,
               is_genesis_pioneer: isGenesisPioneer,
-              referral_code: generateUniqueReferralCode(finalUsername),
+              referral_code: userReferralCode,
               email: email,
               country: country,
               referral_source: referralSource || null,
