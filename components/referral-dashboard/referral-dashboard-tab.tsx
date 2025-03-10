@@ -59,6 +59,12 @@ interface TierInfo {
   name: string
 }
 
+interface TopReferrer {
+  user_id: string
+  total_referrals: number
+  unlocked_rewards: number | null
+}
+
 export function ReferralDashboardTab({ user, profile }) {
   const [stats, setStats] = useState<ReferralStats>({
     total_referrals: 0,
@@ -131,7 +137,7 @@ export function ReferralDashboardTab({ user, profile }) {
         // Get usernames for top referrers
         let topReferrersWithUsernames = []
         if (topReferrers && topReferrers.length > 0) {
-          const userIds = topReferrers.map((referrer: { user_id: string }) => referrer.user_id)
+          const userIds = topReferrers.map((referrer: TopReferrer) => referrer.user_id)
           const { data: profiles, error: profilesError } = await supabase
             .from("profiles")
             .select("id, username")
@@ -142,7 +148,7 @@ export function ReferralDashboardTab({ user, profile }) {
           }
 
           if (profiles) {
-            topReferrersWithUsernames = topReferrers.map((referrer: { user_id: string, total_referrals: number, unlocked_rewards: number | null }) => {
+            topReferrersWithUsernames = topReferrers.map((referrer: TopReferrer) => {
               const profile = profiles.find((p: { id: string, username: string }) => p.id === referrer.user_id)
               return {
                 id: referrer.user_id,

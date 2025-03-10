@@ -262,13 +262,32 @@ export async function POST(request: Request) {
               try {
                 const { data: referrerData, error: referrerError } = await supabaseAdmin
                   .from("profiles")
-                  .select("id")
+                  .select("id, referral_code")
                   .eq("referral_code", referralCode)
                   .single();
                   
                 if (!referrerError && referrerData) {
-                  referrerId = referrerData.id.toString(); // Convert UUID to string
-                  console.log(`Found referrer ID ${referrerId} for referral code ${referralCode}`);
+                  // Store the referral code, not the ID
+                  referrerId = referralCode; // Use the exact referral code provided
+                  console.log(`Found referrer with code ${referralCode}, using this code for referred_by`);
+                } else {
+                  console.error("Error looking up referrer ID:", referrerError);
+                  console.log(`Could not find referrer with code ${referralCode}, trying case-insensitive match`);
+                  
+                  // Try case-insensitive match as a fallback
+                  const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
+                    .from("profiles")
+                    .select("id, referral_code")
+                    .ilike("referral_code", referralCode)
+                    .limit(1);
+                    
+                  if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
+                    // Store the exact referral code from the database, not the ID
+                    referrerId = caseInsensitiveMatch[0].referral_code;
+                    console.log(`Found case-insensitive match: ${caseInsensitiveMatch[0].referral_code}, using this code for referred_by`);
+                  } else {
+                    console.log(`No referrer found for code ${referralCode}, continuing without referral`);
+                  }
                 }
               } catch (referrerLookupError) {
                 console.error("Error looking up referrer ID:", referrerLookupError);
@@ -363,24 +382,69 @@ export async function POST(request: Request) {
               // First check if the referral code is valid
               const { data: referrerData, error: referrerError } = await supabaseAdmin
                 .from("profiles")
-                .select("id, total_referrals")
+                .select("id, total_referrals, referral_code")
                 .eq("referral_code", referralCode)
                 .single();
 
               if (referrerError) {
                 console.error("Error finding referrer:", referrerError);
-                console.log(`Invalid referral code provided: ${referralCode}. Continuing with registration without referral.`);
+                console.log(`Invalid referral code provided: ${referralCode}. Trying case-insensitive match.`);
                 
                 // Try case-insensitive match as a fallback
                 try {
-                  const { data: caseInsensitiveMatch } = await supabaseAdmin
+                  const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                     .from("profiles")
                     .select("id, total_referrals, referral_code")
                     .ilike("referral_code", referralCode)
                     .limit(1);
                     
-                  if (caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
+                  if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
                     console.log(`Found case-insensitive match for referral code: ${caseInsensitiveMatch[0].referral_code}`);
+                    
+                    // Use the matched referrer data
+                    const matchedReferrer = caseInsensitiveMatch[0];
+                    
+                    // 1. Update the referred_by field with the REFERRAL CODE (not the ID)
+                    const { error: updateReferredByError } = await supabaseAdmin
+                      .from("profiles")
+                      .update({ referred_by: matchedReferrer.referral_code })
+                      .eq("id", userId);
+                      
+                    if (updateReferredByError) {
+                      console.error("Error updating referred_by field with referral code:", updateReferredByError);
+                      console.error("Error code:", updateReferredByError.code);
+                      console.error("Error message:", updateReferredByError.message);
+                      console.error("Error details:", updateReferredByError.details);
+                    } else {
+                      console.log(`Successfully updated referred_by field for user ${userId} to referral code ${matchedReferrer.referral_code}`);
+                      
+                      // 2. Create a referral record with BOTH USER IDs (as UUIDs)
+                      const { error: createReferralError } = await supabaseAdmin
+                        .from("referrals")
+                        .insert({
+                          referrer_id: matchedReferrer.id, // This is a UUID
+                          referred_id: userId              // This is a UUID
+                        });
+
+                      if (createReferralError) {
+                        console.error("Error creating referral record:", createReferralError);
+                      } else {
+                        console.log("Successfully created referral record");
+                        
+                        // Update the referrer's total_referrals count
+                        const newReferralCount = (matchedReferrer.total_referrals || 0) + 1;
+                        const { error: updateReferrerError } = await supabaseAdmin
+                          .from("profiles")
+                          .update({ total_referrals: newReferralCount })
+                          .eq("id", matchedReferrer.id);
+                          
+                        if (updateReferrerError) {
+                          console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                        } else {
+                          console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                        }
+                      }
+                    }
                   } else {
                     console.log("No case-insensitive match found either");
                   }
@@ -390,86 +454,56 @@ export async function POST(request: Request) {
               } else if (referrerData) {
                 // Prevent self-referrals
                 if (referrerData.id === userId) {
-                  console.log("Self-referral detected, skipping referral creation")
+                  console.log("Self-referral detected, skipping referral creation");
                 } else {
-                  // Check if this referral already exists to prevent duplicates
-                  const { data: existingReferral, error: checkReferralError } = await supabaseAdmin
-                    .from("referrals")
-                    .select("id")
-                    .eq("referrer_id", referrerData.id)
-                    .eq("referred_id", userId)
-                    .limit(1)
-                  
-                  if (checkReferralError) {
-                    console.error("Error checking existing referral:", checkReferralError)
-                  } else if (!existingReferral || existingReferral.length === 0) {
-                    // Only create the referral if it doesn't already exist
-                    try {
-                      // First update the referred_by field in the user's profile
-                      try {
-                        const referrerIdString = referrerData.id.toString();
-                        console.log(`Updating referred_by field with string value: ${referrerIdString}`);
-                        
-                        const { error: updateReferredByError } = await supabaseAdmin
-                          .from("profiles")
-                          .update({ referred_by: referrerIdString })
-                          .eq("id", userId);
-
-                        if (updateReferredByError) {
-                          console.error("Error updating referred_by field:", updateReferredByError);
-                          console.error("Error code:", updateReferredByError.code);
-                          console.error("Error message:", updateReferredByError.message);
-                          console.error("Error details:", updateReferredByError.details);
-                          // Continue with registration even if updating referred_by fails
-                        } else {
-                          console.log(`Successfully updated referred_by field for user ${userId} to referrer ${referrerIdString}`);
-                          
-                          // Only create the referral record if the referred_by update was successful
-                          const { error: createReferralError } = await supabaseAdmin
-                            .from("referrals")
-                            .insert({
-                              referrer_id: referrerData.id,
-                              referred_id: userId
-                            });
-
-                          if (createReferralError) {
-                            console.error("Error creating referral record:", createReferralError);
-                            // Continue with registration even if referral creation fails
-                          } else {
-                            console.log("Successfully created referral record");
-                            
-                            // Only update the referrer's count if the referral was successfully created
-                            try {
-                              const newReferralCount = (referrerData.total_referrals || 0) + 1;
-                              const { error: updateReferrerError } = await supabaseAdmin
-                                .from("profiles")
-                                .update({ total_referrals: newReferralCount })
-                                .eq("id", referrerData.id);
-
-                              if (updateReferrerError) {
-                                console.error("Error updating referrer stats:", updateReferrerError);
-                              } else {
-                                console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
-                              }
-                            } catch (updateError) {
-                              console.error("Exception updating referrer stats:", updateError);
-                            }
-                          }
-                        }
-                      } catch (updateError) {
-                        console.error("Exception updating referred_by field:", updateError);
-                      }
-                    } catch (insertError) {
-                      console.error("Exception creating referral record:", insertError);
-                    }
+                  // 1. Update the referred_by field with the REFERRAL CODE (not the ID)
+                  const { error: updateReferredByError } = await supabaseAdmin
+                    .from("profiles")
+                    .update({ referred_by: referrerData.referral_code })
+                    .eq("id", userId);
+                    
+                  if (updateReferredByError) {
+                    console.error("Error updating referred_by field with referral code:", updateReferredByError);
+                    console.error("Error code:", updateReferredByError.code);
+                    console.error("Error message:", updateReferredByError.message);
+                    console.error("Error details:", updateReferredByError.details);
                   } else {
-                    console.log("Referral already exists, skipping creation");
+                    console.log(`Successfully updated referred_by field for user ${userId} to referral code ${referrerData.referral_code}`);
+                    
+                    // 2. Create a referral record with BOTH USER IDs (as UUIDs)
+                    const { error: createReferralError } = await supabaseAdmin
+                      .from("referrals")
+                      .insert({
+                        referrer_id: referrerData.id, // This is a UUID
+                        referred_id: userId           // This is a UUID
+                      });
+
+                    if (createReferralError) {
+                      console.error("Error creating referral record:", createReferralError);
+                    } else {
+                      console.log("Successfully created referral record");
+                      
+                      // Update the referrer's total_referrals count
+                      const newReferralCount = (referrerData.total_referrals || 0) + 1;
+                      const { error: updateReferrerError } = await supabaseAdmin
+                        .from("profiles")
+                        .update({ total_referrals: newReferralCount })
+                        .eq("id", referrerData.id);
+                        
+                      if (updateReferrerError) {
+                        console.error("Error updating referrer's total_referrals:", updateReferrerError);
+                      } else {
+                        console.log(`Successfully updated referrer's total_referrals to ${newReferralCount}`);
+                      }
+                    }
                   }
                 }
+              } else {
+                console.log(`No referrer found for code ${referralCode}, continuing without referral`);
               }
             } catch (referralError) {
               console.error("Error processing referral:", referralError);
-              // Non-blocking error - continue with registration
+              // Continue with registration even if referral processing fails
             }
           }
 
@@ -565,8 +599,8 @@ export async function POST(request: Request) {
 
 // Function to generate a unique referral code
 function generateUniqueReferralCode(username: string): string {
-  // Create a base for the referral code using the username (first 3 chars)
-  const baseCode = username.slice(0, 3).toUpperCase();
+  // Use "TAU" as the prefix for all referral codes
+  const baseCode = "TAU";
   
   // Add a timestamp component to ensure uniqueness
   const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
