@@ -154,6 +154,10 @@ export async function POST(request: Request) {
 
       // Step 3: Create the user in Auth
       try {
+        console.log("Attempting to create auth user with email:", email);
+        
+        // Simplify the metadata we're storing in auth.users
+        // Only store essential information to avoid potential size limits
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -161,17 +165,18 @@ export async function POST(request: Request) {
             emailRedirectTo: `${requestUrl.origin}/auth/callback`,
             data: {
               username: finalUsername,
-              is_pi_user: isPiUser,
-              pioneer_number: pioneerNumber,
-              is_genesis_pioneer: isGenesisPioneer,
-              country,
-              referral_source: referralSource
+              // Remove non-essential metadata from auth.users
+              // This data will be stored in the profiles table instead
             }
           },
         })
 
         if (signUpError) {
           console.error("Error creating user:", signUpError)
+          console.error("Error code:", signUpError.code)
+          console.error("Error message:", signUpError.message)
+          console.error("Error status:", signUpError.status)
+          console.error("Error details:", JSON.stringify(signUpError, null, 2))
           
           // Provide more specific error messages based on Supabase error codes
           if (signUpError.message.includes("email")) {
