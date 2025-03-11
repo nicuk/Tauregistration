@@ -263,7 +263,7 @@ export async function POST(request: Request) {
               });
               
             if (functionError) {
-              console.error("Error calling api_register_user function:", functionError);
+              console.log("Error calling api_register_user function:", JSON.stringify(functionError, null, 2));
               console.log("Function reported error, falling back to direct insert method...");
             } else if (functionResult && !functionResult.success) {
               console.log("Profile creation result:", functionResult);
@@ -329,7 +329,7 @@ export async function POST(request: Request) {
                 referrerId = referralCode; // Use the exact referral code provided
                 console.log(`Found referrer with code ${referralCode}, using this code for referred_by`);
               } else {
-                console.error("Error looking up referrer ID:", referrerError);
+                console.error("Error looking up referrer ID:", JSON.stringify(referrerError, null, 2));
                 console.log(`Could not find referrer with code ${referralCode}, trying case-insensitive match`);
                   
                 // Try case-insensitive match as a fallback
@@ -348,7 +348,7 @@ export async function POST(request: Request) {
                 }
               }
             } catch (referrerLookupError) {
-              console.error("Error looking up referrer ID:", referrerLookupError);
+              console.error("Exception during referrer lookup:", referrerLookupError);
               // Continue with registration even if referrer lookup fails
             }
           }
@@ -473,7 +473,7 @@ export async function POST(request: Request) {
               .single();
 
             if (referrerError) {
-              console.error("Error finding referrer:", referrerError);
+              console.error("Error finding referrer:", JSON.stringify(referrerError, null, 2));
               
               // Try case-insensitive match as a fallback
               console.log("Trying case-insensitive match for referral code");
