@@ -122,6 +122,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
         if (response.status === 400) {
           if (data.error === "email_already_registered") {
             throw new Error(data.message || "This email address is already registered. Please use a different email or try logging in.")
+          } else if (data.error === "username_already_exists") {
+            throw new Error(data.message || "This username is already taken. Please choose a different username.")
           } else if (data.error.includes("email")) {
             throw new Error("This email address cannot be used. Please try another one.")
           } else if (data.error.includes("password")) {
@@ -181,7 +183,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
       <CardHeader className="flex flex-col items-center space-y-4 pb-2">
         <div className="w-16 h-16 flex items-center justify-center">
           <img
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Work__10_-removebg-preview-pC0L9vOwcVGasdyZKvzBtMlJk1PihC.png"
+            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Work__10_-removebg-preview-pC0L9vOwcVGasdyZKvzBtMlJp92fxo.jpeg"
             alt="TAU Network Logo"
             className="w-full h-full object-contain"
           />
@@ -196,7 +198,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
           <div className="flex justify-between text-sm mb-1">
             <span>Genesis Pioneer spots</span>
             <span className="font-medium">
-              {formatNumber(TOTAL_GENESIS_SPOTS - spotsRemaining)}/{formatNumber(TOTAL_GENESIS_SPOTS)} claimed
+              {formatNumber(spotsRemaining)}/{formatNumber(TOTAL_GENESIS_SPOTS)} remaining
             </span>
           </div>
           <Progress value={percentageFilled} className="h-2" />
@@ -368,4 +370,3 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
 }
 
 export default RegistrationForm
-

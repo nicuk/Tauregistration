@@ -46,7 +46,10 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [] }: Leaderb
                   )}
                   <span className="font-medium">{referrer.username}</span>
                 </div>
-                <span className="tabular-nums text-primary">{referrer.referrals} referrals</span>
+                <div className="flex flex-col items-end">
+                  <span className="tabular-nums text-primary">{referrer.referrals} referrals</span>
+                  <span className="text-sm text-muted-foreground">{((referrer.earnings || 0) / 1000).toLocaleString()} TAU</span>
+                </div>
               </motion.div>
             ))
           ) : (
