@@ -5,11 +5,12 @@ import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Trophy, Share2, Info, Users, ChevronDown, ChevronUp, User } from "lucide-react"
-import { createClientSupabaseClient } from "@/lib/supabase-client"
-import { TotalEarningsCard } from "./total-earnings-card"
+import { Info, User, Users, Trophy, ChevronDown, ChevronUp } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { supabase } from "@/lib/supabase-client"
+import { TotalEarningsCard } from "./total-earnings-card"
 import { Leaderboard } from "./leaderboard"
+import { User as SupabaseUser } from "@supabase/supabase-js"
 
 // Define interfaces for TypeScript type safety
 interface ReferralStats {
@@ -68,8 +69,9 @@ interface TopReferrer {
   total_earnings: number | null
 }
 
-export function ReferralDashboardTab({ user, profile }) {
+export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; profile: any }) {
   const [stats, setStats] = useState<ReferralStats>({
+    user_id: "",
     total_referrals: 0,
     verified_referrals: 0,
     active_referrals: 0,
@@ -79,7 +81,7 @@ export function ReferralDashboardTab({ user, profile }) {
     pending_rewards: 0,
     unlocked_rewards: 0,
     current_tier: 0,
-    next_tier: 1,
+    next_tier: 0,
     current_tier_progress: 0,
     current_tier_name: "",
     next_tier_name: "",
@@ -87,8 +89,8 @@ export function ReferralDashboardTab({ user, profile }) {
     unlocked_percentage: 0,
     top_referrers: [],
     progress_to_next_tier: 0,
-    next_tier_reward: 10000,
-    referrals_needed: 1,
+    next_tier_reward: 0,
+    referrals_needed: 0,
     total_users: 0,
     referral_details: "",
     milestone_rewards: 0,
@@ -99,7 +101,6 @@ export function ReferralDashboardTab({ user, profile }) {
   const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([])
   const [showReferredUsers, setShowReferredUsers] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const supabase = createClientSupabaseClient()
 
   useEffect(() => {
     fetchReferralStats()
@@ -341,7 +342,7 @@ Join me with my referral link: ${referralLink}
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`, "_blank")
   }
 
-  const copyToClipboard = () => {
+  const copyReferralLink = () => {
     navigator.clipboard.writeText(referralLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -352,35 +353,91 @@ Join me with my referral link: ${referralLink}
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      {/* Total Earnings Card */}
       <TotalEarningsCard
         totalEarnings={stats.total_earnings}
-        unlockedEarnings={stats.unlocked_rewards || 0}
-        pendingEarnings={stats.pending_rewards || 0}
-        unlockedPercentage={stats.unlocked_percentage || 0}
-        milestoneRewards={stats.milestone_rewards || 0}
-        referralRewards={stats.referral_rewards || 0}
+        unlockedEarnings={stats.unlocked_rewards}
+        pendingEarnings={stats.pending_rewards}
+        unlockedPercentage={stats.unlocked_percentage}
+        milestoneRewards={stats.milestone_rewards}
+        referralRewards={stats.referral_rewards}
       />
 
-      {/* Share Section */}
+      {/* Grid layout for stats and leaderboard */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Referral Statistics */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">Referral Statistics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  <span className="text-sm font-medium">Total Referrals</span>
+                </div>
+                <span className="tabular-nums text-lg font-semibold">{stats.total_referrals || 0}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-green-500" />
+                  <span className="text-sm font-medium">Verified Referrals</span>
+                </div>
+                <span className="tabular-nums text-lg font-semibold">{stats.verified_referrals || 0}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  <span className="text-sm font-medium">Your Rank</span>
+                </div>
+                <span className="tabular-nums text-lg font-semibold">
+                  #{stats.rank || 0} of {stats.total_users || 0}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Referral Leaderboard */}
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">Referral Leaderboard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Leaderboard 
+              rank={stats.rank} 
+              totalReferrers={stats.total_users} 
+              topReferrers={stats.top_referrers}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Referral Link Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Share Your Referral Link</CardTitle>
+          <CardTitle className="text-lg font-semibold">Your Referral Link</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex space-x-2">
-            <Input value={referralLink} readOnly />
-            <Button onClick={copyToClipboard}>{copied ? "Copied!" : "Copy"}</Button>
-          </div>
-
-          <div className="flex space-x-4">
-            <Button onClick={handleShare} className="flex-1">
-              <Share2 className="mr-2 h-4 w-4" />
-              Share on Twitter
-            </Button>
-
-            <div className="bg-white p-2 rounded-lg">
-              {/* Removed QRCode */}
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Input
+                readOnly
+                value={referralLink}
+                className="font-mono text-sm"
+              />
+              <Button
+                size="sm"
+                onClick={copyReferralLink}
+                variant="primary"
+                className="bg-primary text-white hover:bg-primary/90"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -389,39 +446,50 @@ Join me with my referral link: ${referralLink}
       {/* Next Milestone */}
       <Card>
         <CardHeader>
-          <CardTitle>Milestone Progress</CardTitle>
+          <CardTitle className="text-lg font-semibold">Milestone Progress</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="mb-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Trophy className="h-5 w-5 text-primary" />
-              <span className="font-semibold">Tier {stats.current_tier}: {stats.current_tier_name}</span>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Progress to Next Milestone</span>
+              <span className="tabular-nums font-medium">
+                {stats.total_referrals} / {stats.next_tier === 1 ? 1 : 
+                  stats.next_tier === 2 ? 3 : 
+                  stats.next_tier === 3 ? 6 : 
+                  stats.next_tier === 4 ? 12 : 
+                  stats.next_tier === 5 ? 25 : 
+                  stats.next_tier === 6 ? 50 : 100} referrals
+              </span>
             </div>
-            <p className="text-2xl font-bold">{stats.total_earnings.toLocaleString()} TAU</p>
-            <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm inline-block mt-2">
-              {stats.unlocked_percentage.toFixed(1)}% of Maximum Reward Unlocked
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${stats.progress_to_next_tier}%` }}
+                className="h-full bg-primary rounded-full"
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-primary/10 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                <span className="font-medium">Current Tier</span>
+              </div>
+              <p className="text-lg font-semibold">Tier {stats.current_tier}: {stats.current_tier_name}</p>
+            </div>
+            
+            <div className="bg-primary/10 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                <span className="font-medium">Next Reward</span>
+              </div>
+              <p className="text-lg font-semibold">{stats.next_tier_reward.toLocaleString()} TAU</p>
             </div>
           </div>
           
-          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${stats.current_tier_progress}%` }}
-              className="h-full bg-primary rounded-full"
-            />
-          </div>
-          
-          <div className="mt-2 text-sm text-right">
-            {stats.verified_referrals || 0}/{stats.next_tier > 0 ? 
-              (stats.next_tier === 1 ? 1 : 
-               stats.next_tier === 2 ? 3 : 
-               stats.next_tier === 3 ? 6 : 
-               stats.next_tier === 4 ? 12 : 
-               stats.next_tier === 5 ? 25 : 
-               stats.next_tier === 6 ? 50 : 100) : 1} verified referrals
-          </div>
-          
-          <p className="mt-4 text-center text-lg">
+          <p className="text-center text-lg">
             {stats.referrals_needed > 0 ? (
               <>
                 {stats.referrals_needed} more verified {stats.referrals_needed === 1 ? 'referral' : 'referrals'} to reach Tier {stats.next_tier}: {stats.next_tier_name}
@@ -430,167 +498,86 @@ Join me with my referral link: ${referralLink}
               <>Tier {stats.current_tier} completed! You've reached the highest milestone.</>
             )}
           </p>
-          
-          <div 
-            className="flex items-center justify-center mt-4 cursor-pointer" 
-            onClick={() => setShowReferredUsers(!showReferredUsers)}
-          >
-            {showReferredUsers ? (
-              <ChevronUp className="h-6 w-6 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-6 w-6 text-muted-foreground" />
-            )}
-          </div>
-          
-          {showReferredUsers && (
-            <div className="mt-6">
-              <h3 className="font-semibold text-lg mb-4">Referred Friends</h3>
-              {referredUsers.length > 0 ? (
-                <div className="space-y-4">
-                  {referredUsers.map((referral: ReferredUser) => (
-                    <div key={referral.id} className="bg-muted/50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <div className="bg-primary text-white rounded-full h-8 w-8 flex items-center justify-center mr-2">
-                            <User className="h-4 w-4" />
-                          </div>
-                          <span className="font-medium">{referral.username || 'Anonymous'}</span>
-                        </div>
-                        <span className="text-sm text-muted-foreground">{referral.formattedDate}</span>
-                      </div>
-                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden mb-2">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${referral.completionPercentage}%` }}
-                          className="h-full bg-primary rounded-full"
-                        />
-                      </div>
-                      <div className="flex justify-between text-sm mb-3">
-                        <span>{referral.completionPercentage}% Complete</span>
-                        <span>{referral.unlockedTAU.toLocaleString()} TAU unlocked</span>
-                      </div>
-                      
-                      {/* Verification Steps */}
-                      <div className="grid grid-cols-5 gap-2 mt-2">
-                        <div className={`text-xs p-1 text-center rounded ${referral.steps[0] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                          Email
-                        </div>
-                        <div className={`text-xs p-1 text-center rounded ${referral.steps[1] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                          Twitter
-                        </div>
-                        <div className={`text-xs p-1 text-center rounded ${referral.steps[2] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                          Telegram
-                        </div>
-                        <div className={`text-xs p-1 text-center rounded ${referral.steps[3] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                          Share
-                        </div>
-                        <div className={`text-xs p-1 text-center rounded ${referral.steps[4] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                          Refer
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground">No referrals yet. Share your link to invite friends!</p>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Referral Statistics */}
+      {/* Referred Friends */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Referral Statistics</CardTitle>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    Statistics show your total referrals, verified referrals, and current rank.
-                    Verified referrals have completed all 5 verification steps.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-muted p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Users className="h-4 w-4" />
-                <span>Total Referrals</span>
-              </div>
-              <p className="text-2xl font-bold mt-2">{stats.total_referrals || 0}</p>
-            </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Users className="h-4 w-4 text-green-500" />
-                <span>Verified</span>
-              </div>
-              <p className="text-2xl font-bold mt-2">{stats.verified_referrals || 0}</p>
-            </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Trophy className="h-4 w-4" />
-                <span>Your Rank</span>
-              </div>
-              <p className="text-2xl font-bold mt-2">#{stats.rank || 0}</p>
+            <CardTitle className="text-lg font-semibold">Referred Friends</CardTitle>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowReferredUsers(!showReferredUsers)}
+                className="h-8 px-2"
+              >
+                {showReferredUsers ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Verification Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Verification Progress</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <div className="flex justify-between mb-2">
-              <span>Overall Progress</span>
-              <span>{stats.overall_completion_percentage ? 
-                stats.overall_completion_percentage.toFixed(1) : 
-                "0.0"}%</span>
-            </div>
-            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ 
-                  width: `${stats.overall_completion_percentage || 0}%` 
-                }}
-                className="h-full bg-primary rounded-full"
-              />
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              {referredUsers.length} referrals have completed an average of {stats.overall_completion_percentage ? 
-                stats.overall_completion_percentage.toFixed(1) : 
-                "0.0"}% of all verification steps
-            </p>
-          </div>
-        </CardContent>
+        {showReferredUsers && (
+          <CardContent>
+            {referredUsers.length > 0 ? (
+              <div className="space-y-4">
+                {referredUsers.map((user) => (
+                  <div key={user.id} className="bg-muted/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <div className="bg-primary text-white rounded-full h-8 w-8 flex items-center justify-center mr-2">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <span className="font-medium">{user.username || 'Anonymous'}</span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">{user.formattedDate}</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden mb-2">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${user.completionPercentage}%` }}
+                        className="h-full bg-primary rounded-full"
+                      />
+                    </div>
+                    <div className="flex justify-between text-sm mb-3">
+                      <span>{user.completionPercentage}% Complete</span>
+                      <span>{user.unlockedTAU.toLocaleString()} TAU unlocked</span>
+                    </div>
+                    
+                    {/* Verification Steps */}
+                    <div className="grid grid-cols-5 gap-2 mt-2">
+                      <div className={`text-xs p-1 text-center rounded ${user.steps[0] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Email
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${user.steps[1] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Twitter
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${user.steps[2] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Telegram
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${user.steps[3] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Share
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${user.steps[4] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Refer
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-muted-foreground">No referred users yet</p>
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
-
-      {/* Referral Leaderboard */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Referral Leaderboard</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Leaderboard 
-            rank={stats.rank} 
-            totalReferrers={stats.total_users} 
-            topReferrers={stats.top_referrers}
-          />
-        </CardContent>
-      </Card>
-
-    </div>
+    </motion.div>
   )
 }
