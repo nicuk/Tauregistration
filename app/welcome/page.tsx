@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OverviewTab } from "@/components/dashboard/overview-tab"
 import { VerificationTab } from "@/components/dashboard/verification-tab"
-import { ReferralDashboardTab } from "@/components/dashboard/referral-dashboard-tab"
+import { ReferralDashboardTab } from "@/components/referral-dashboard/referral-dashboard-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { EmailVerification } from "@/components/email-verification"
 import { CheckCircle } from "lucide-react"
@@ -223,4 +223,3 @@ export default function WelcomePage() {
     </div>
   )
 }
-
