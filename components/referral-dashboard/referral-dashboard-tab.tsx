@@ -36,6 +36,8 @@ interface ReferralStats {
   referrals_needed: number
   total_users: number
   referral_details: string
+  milestone_rewards?: number
+  referral_rewards?: number
 }
 
 interface ReferredUser {
@@ -88,7 +90,9 @@ export function ReferralDashboardTab({ user, profile }) {
     next_tier_reward: 10000,
     referrals_needed: 1,
     total_users: 0,
-    referral_details: ""
+    referral_details: "",
+    milestone_rewards: 0,
+    referral_rewards: 0
   })
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
