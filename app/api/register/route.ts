@@ -321,7 +321,7 @@ export async function POST(request: Request) {
               const { data: referrerData, error: referrerError } = await supabaseAdmin
                 .from("profiles")
                 .select("id, total_referrals, referral_code")
-                .eq("referral_code", referralCode)
+                .eq("profiles.referral_code", referralCode) // Fix the ambiguous column reference
                 .single();
                   
               if (!referrerError && referrerData) {
@@ -336,7 +336,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, referral_code")
-                  .ilike("referral_code", referralCode)
+                  .ilike("profiles.referral_code", referralCode) // Fix the ambiguous column reference
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
@@ -397,7 +397,6 @@ export async function POST(request: Request) {
               is_pi_user: isPiUser,
               pioneer_number: nextPioneerNumber,
               is_genesis_pioneer: isGenesisPioneer,
-              // Use a different variable name to avoid ambiguity
               referral_code: userReferralCode,
               email: email,
               country: country,
@@ -470,7 +469,7 @@ export async function POST(request: Request) {
             const { data: referrerData, error: referrerError } = await supabaseAdmin
               .from("profiles")
               .select("id, total_referrals, referral_code")
-              .eq("referral_code", referralCode)
+              .eq("profiles.referral_code", referralCode) // Fix the ambiguous column reference
               .single();
 
             if (referrerError) {
@@ -482,7 +481,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, total_referrals, referral_code")
-                  .ilike("referral_code", referralCode)
+                  .ilike("profiles.referral_code", referralCode) // Fix the ambiguous column reference
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
