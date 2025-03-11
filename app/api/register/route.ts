@@ -320,8 +320,8 @@ export async function POST(request: Request) {
               // First try exact match
               const { data: referrerData, error: referrerError } = await supabaseAdmin
                 .from("profiles")
-                .select("id, referral_code")
-                .eq("profiles.referral_code", referralCode)
+                .select("id, total_referrals, referral_code")
+                .eq("referral_code", referralCode)
                 .single();
                   
               if (!referrerError && referrerData) {
@@ -336,7 +336,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, referral_code")
-                  .ilike("profiles.referral_code", referralCode)
+                  .ilike("referral_code", referralCode)
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
@@ -449,6 +449,18 @@ export async function POST(request: Request) {
           );
         }
           
+        // Update the referrer's profile with the referred_by field
+        const { error: updateReferredByError } = await supabaseAdmin
+          .from("profiles")
+          .update({ referred_by: referralCode })
+          .eq("id", userId);
+
+        if (updateReferredByError) {
+          console.error("Error updating referred_by field:", updateReferredByError);
+        } else {
+          console.log("Successfully updated referred_by field with referral code");
+        }
+          
         // Step 5: Handle referral if provided
         if (referralCode) {
           try {
@@ -458,7 +470,7 @@ export async function POST(request: Request) {
             const { data: referrerData, error: referrerError } = await supabaseAdmin
               .from("profiles")
               .select("id, total_referrals, referral_code")
-              .eq("profiles.referral_code", referralCode)
+              .eq("referral_code", referralCode)
               .single();
 
             if (referrerError) {
@@ -470,7 +482,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, total_referrals, referral_code")
-                  .ilike("profiles.referral_code", referralCode)
+                  .ilike("referral_code", referralCode)
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
