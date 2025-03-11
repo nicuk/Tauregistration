@@ -183,7 +183,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
       <CardHeader className="flex flex-col items-center space-y-4 pb-2">
         <div className="w-16 h-16 flex items-center justify-center">
           <img
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Work__10_-removebg-preview-pC0L9vOwcVGasdyZKvzBtMlJp92fxo.jpeg"
+            src="/tau-logo.svg"
             alt="TAU Network Logo"
             className="w-full h-full object-contain"
           />
