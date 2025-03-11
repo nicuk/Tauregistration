@@ -11,26 +11,26 @@ export const metadata = {
   icons: {
     icon: [
       {
-        url: "/tau-logo.png",
+        url: "/tau-logo-new.svg",
         sizes: "32x32",
-        type: "image/png",
+        type: "image/svg+xml",
       },
       {
-        url: "/tau-logo.png",
+        url: "/tau-logo-new.svg",
         sizes: "192x192",
-        type: "image/png",
+        type: "image/svg+xml",
       },
     ],
-    shortcut: "/tau-logo.png",
+    shortcut: "/tau-logo-new.svg",
     apple: {
-      url: "/tau-logo.png",
+      url: "/tau-logo-new.svg",
       sizes: "180x180",
-      type: "image/png",
+      type: "image/svg+xml",
     },
     other: [
       {
         rel: "icon",
-        url: "/tau-logo.png",
+        url: "/tau-logo-new.svg",
       },
     ],
   },
