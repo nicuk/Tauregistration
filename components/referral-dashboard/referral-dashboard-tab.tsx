@@ -10,6 +10,7 @@ import { createClientSupabaseClient } from "@/lib/supabase-client"
 import { TotalEarningsCard } from "./total-earnings-card"
 import QRCode from "qrcode.react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Leaderboard } from "./leaderboard"
 
 // Define interfaces for TypeScript type safety
 interface ReferralStats {
@@ -101,6 +102,38 @@ export function ReferralDashboardTab({ user, profile }) {
     fetchReferredUsers()
   }, [])
 
+  const calculateMilestoneRewards = (verifiedReferrals: number) => {
+    // Determine current tier based on verified referrals
+    const tiers = [
+      { tier: 1, required: 1, reward: 10000, name: "Community Founder" },
+      { tier: 2, required: 3, reward: 25000, name: "Community Builder" },
+      { tier: 3, required: 6, reward: 45000, name: "Community Leader" },
+      { tier: 4, required: 12, reward: 100000, name: "Community Champion" },
+      { tier: 5, required: 25, reward: 250000, name: "Community Visionary" },
+      { tier: 6, required: 50, reward: 500000, name: "Community Luminary" },
+      { tier: 7, required: 100, reward: 1000000, name: "Community Legend" }
+    ]
+    
+    // Find the highest tier the user has achieved
+    const achievedTier = tiers.filter(tier => verifiedReferrals >= tier.required)
+                             .sort((a, b) => b.tier - a.tier)[0]
+    
+    return achievedTier ? achievedTier.reward : 0
+  }
+
+  const calculateReferralRewards = (referredUsers: ReferredUser[]) => {
+    // Each referral can earn up to 10,000 TAU (20% per verification step)
+    return referredUsers.reduce((total, user) => {
+      // Count completed steps
+      const completedSteps = user.steps ? user.steps.filter(Boolean).length : 0
+      
+      // Each step is worth 20% of 10,000 TAU
+      const userReward = completedSteps * 0.2 * 10000
+      
+      return total + userReward
+    }, 0)
+  }
+
   const fetchReferralStats = async () => {
     try {
       setLoading(true)
@@ -186,13 +219,21 @@ export function ReferralDashboardTab({ user, profile }) {
         const nextThreshold = nextTier > 0 ? nextTierData.required : tiers[0].required
         const referralsNeeded = Math.max(0, nextThreshold - verifiedReferrals)
 
+        // Calculate milestone rewards
+        const milestoneRewards = calculateMilestoneRewards(verifiedReferrals)
+
+        // Calculate referral rewards
+        const referralRewards = calculateReferralRewards(referredUsers)
+
         // Update stats state
         setStats({
           ...statsData,
           top_referrers: topReferrersWithUsernames,
           referrals_needed: referralsNeeded,
           current_tier_name: statsData.current_tier_name || currentTierData.name,
-          next_tier_name: statsData.next_tier_name || nextTierData.name
+          next_tier_name: statsData.next_tier_name || nextTierData.name,
+          milestone_rewards: milestoneRewards,
+          referral_rewards: referralRewards
         })
       }
     } catch (error) {
@@ -313,6 +354,8 @@ Join me with my referral link: ${referralLink}
         unlockedEarnings={stats.unlocked_rewards || 0}
         pendingEarnings={stats.pending_rewards || 0}
         unlockedPercentage={stats.unlocked_percentage || 0}
+        milestoneRewards={stats.milestone_rewards || 0}
+        referralRewards={stats.referral_rewards || 0}
       />
 
       {/* Share Section */}
@@ -536,33 +579,14 @@ Join me with my referral link: ${referralLink}
           <CardTitle>Referral Leaderboard</CardTitle>
         </CardHeader>
         <CardContent>
-          {stats.top_referrers && stats.top_referrers.length > 0 ? (
-            <div className="space-y-3">
-              {stats.top_referrers.map((referrer, index) => (
-                <motion.div
-                  key={referrer.id || index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className={`flex items-center justify-between p-3 rounded-lg ${index === 0 ? 'bg-yellow-50' : index === 1 ? 'bg-gray-50' : index === 2 ? 'bg-amber-50' : 'bg-muted/30'}`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-6 text-center font-bold">
-                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                    </div>
-                    <span className="font-medium">{referrer.username || 'Anonymous'}</span>
-                  </div>
-                  <span className="text-primary font-semibold">{(referrer.earnings || 0).toLocaleString()} TAU</span>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6 text-muted-foreground">
-              No referrals data available yet. Be the first to climb the leaderboard!
-            </div>
-          )}
+          <Leaderboard 
+            rank={stats.rank} 
+            totalReferrers={stats.total_users} 
+            topReferrers={stats.top_referrers}
+          />
         </CardContent>
       </Card>
+
     </div>
   )
 }

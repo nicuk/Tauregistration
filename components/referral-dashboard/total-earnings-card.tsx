@@ -2,20 +2,24 @@
 
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Coins, TrendingUp, Unlock, Clock } from "lucide-react"
+import { Coins, TrendingUp, Unlock, Clock, Award, Users } from "lucide-react"
 
 interface TotalEarningsProps {
   totalEarnings: number
   unlockedEarnings: number
   pendingEarnings: number
   unlockedPercentage: number
+  milestoneRewards?: number
+  referralRewards?: number
 }
 
 export function TotalEarningsCard({ 
   totalEarnings, 
   unlockedEarnings, 
   pendingEarnings, 
-  unlockedPercentage 
+  unlockedPercentage,
+  milestoneRewards = 0,
+  referralRewards = 0
 }: TotalEarningsProps) {
   return (
     <Card className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white">
@@ -29,6 +33,25 @@ export function TotalEarningsCard({
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="text-3xl font-bold">{totalEarnings.toLocaleString()} TAU</div>
 
+          {/* Reward Types */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="flex items-center space-x-1 mb-1">
+                <Award className="h-4 w-4 text-yellow-300" />
+                <p className="text-sm opacity-70">Milestone Rewards</p>
+              </div>
+              <p className="text-lg font-semibold">{milestoneRewards.toLocaleString()} TAU</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="flex items-center space-x-1 mb-1">
+                <Users className="h-4 w-4 text-blue-300" />
+                <p className="text-sm opacity-70">Referral Rewards</p>
+              </div>
+              <p className="text-lg font-semibold">{referralRewards.toLocaleString()} TAU</p>
+            </div>
+          </div>
+
+          {/* Unlocked vs Pending */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/10 rounded-lg p-3">
               <div className="flex items-center space-x-1 mb-1">

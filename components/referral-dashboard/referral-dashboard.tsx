@@ -22,6 +22,12 @@ export interface ReferralData {
   currentTier: number
   rank?: number
   totalReferrers?: number
+  topReferrers?: Array<{
+    id?: string
+    username: string
+    referrals: number
+    earnings?: number
+  }>
 }
 
 interface ReferralDashboardProps {
@@ -45,7 +51,11 @@ export function ReferralDashboard({ data }: ReferralDashboardProps) {
           totalReferrers={data.totalReferrers}
         />
         <Card className="overflow-hidden">
-          <Leaderboard rank={data.rank} totalReferrers={data.totalReferrers} />
+          <Leaderboard 
+            rank={data.rank} 
+            totalReferrers={data.totalReferrers} 
+            topReferrers={data.topReferrers}
+          />
         </Card>
       </div>
 
@@ -53,4 +63,3 @@ export function ReferralDashboard({ data }: ReferralDashboardProps) {
     </motion.div>
   )
 }
-
