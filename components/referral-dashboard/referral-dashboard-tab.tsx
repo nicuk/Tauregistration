@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Trophy, Share2, Info, Users, ChevronDown, ChevronUp, User } from "lucide-react"
 import { createClientSupabaseClient } from "@/lib/supabase-client"
 import { TotalEarningsCard } from "./total-earnings-card"
-import QRCode from "qrcode.react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Leaderboard } from "./leaderboard"
 
@@ -66,6 +65,7 @@ interface TopReferrer {
   user_id: string
   total_referrals: number
   unlocked_rewards: number | null
+  total_earnings: number | null
 }
 
 export function ReferralDashboardTab({ user, profile }) {
@@ -191,7 +191,7 @@ export function ReferralDashboardTab({ user, profile }) {
                 id: referrer.user_id,
                 username: profile?.username || "Anonymous",
                 referrals: referrer.total_referrals,
-                earnings: referrer.unlocked_rewards || 0
+                earnings: referrer.total_earnings || referrer.unlocked_rewards || 0
               }
             })
           }
@@ -380,7 +380,7 @@ Join me with my referral link: ${referralLink}
             </Button>
 
             <div className="bg-white p-2 rounded-lg">
-              <QRCode value={referralLink} size={100} />
+              {/* Removed QRCode */}
             </div>
           </div>
         </CardContent>
