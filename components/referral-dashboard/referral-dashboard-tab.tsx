@@ -70,6 +70,8 @@ interface TopReferrer {
   total_earnings: number | null
 }
 
+const cardBgStyle = "bg-[#F8FAFC]"
+
 export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; profile: any }) {
   const [stats, setStats] = useState<ReferralStats>({
     user_id: "",
@@ -366,7 +368,7 @@ Join me with my referral link: ${referralLink}
       />
 
       {/* Share Section */}
-      <Card>
+      <Card className={cardBgStyle}>
         <CardHeader>
           <CardTitle>Share Your Referral Link</CardTitle>
         </CardHeader>
@@ -389,7 +391,7 @@ Join me with my referral link: ${referralLink}
       </Card>
 
       {/* Next Milestone */}
-      <Card>
+      <Card className={cardBgStyle}>
         <CardHeader>
           <CardTitle>Milestone Progress</CardTitle>
         </CardHeader>
@@ -502,7 +504,7 @@ Join me with my referral link: ${referralLink}
       </Card>
 
       {/* Referral Statistics */}
-      <Card>
+      <Card className={cardBgStyle}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Referral Statistics</CardTitle>
@@ -549,7 +551,7 @@ Join me with my referral link: ${referralLink}
       </Card>
 
       {/* Verification Progress */}
-      <Card>
+      <Card className={cardBgStyle}>
         <CardHeader>
           <CardTitle>Verification Progress</CardTitle>
         </CardHeader>
@@ -580,17 +582,95 @@ Join me with my referral link: ${referralLink}
       </Card>
 
       {/* Referral Leaderboard */}
-      <Card>
+      <Card className={cardBgStyle}>
         <CardHeader>
           <CardTitle>Referral Leaderboard</CardTitle>
         </CardHeader>
         <CardContent>
           <Leaderboard 
-            rank={stats.rank} 
-            totalReferrers={stats.total_users} 
-            topReferrers={stats.top_referrers}
+            topReferrers={stats.top_referrers || []} 
+            rank={stats.rank}
+            totalReferrers={stats.total_users}
+            fetchGlobalLeaderboard={true} // Ensure all users see the same global leaderboard
           />
         </CardContent>
+      </Card>
+
+      {/* Referred Users */}
+      <Card className={cardBgStyle}>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Your Referrals</CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowReferredUsers(!showReferredUsers)}
+          >
+            {showReferredUsers ? (
+              <>
+                <ChevronUp className="mr-2 h-4 w-4" />
+                Hide
+              </>
+            ) : (
+              <>
+                <ChevronDown className="mr-2 h-4 w-4" />
+                Show
+              </>
+            )}
+          </Button>
+        </CardHeader>
+        {showReferredUsers && (
+          <CardContent>
+            {referredUsers.length > 0 ? (
+              <div className="space-y-4">
+                {referredUsers.map((referral) => (
+                  <div key={referral.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <div className="bg-primary text-white rounded-full h-8 w-8 flex items-center justify-center mr-2">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <span className="font-medium">{referral.username}</span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">{referral.formattedDate}</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden mb-2">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${referral.completionPercentage}%` }}
+                        className="h-full bg-primary rounded-full"
+                      />
+                    </div>
+                    <div className="flex justify-between text-sm mb-3">
+                      <span>{referral.completionPercentage}% Complete</span>
+                      <span>{referral.unlockedTAU?.toLocaleString() || 0} TAU unlocked</span>
+                    </div>
+                    
+                    {/* Verification Steps */}
+                    <div className="grid grid-cols-5 gap-2 mt-2">
+                      <div className={`text-xs p-1 text-center rounded ${referral.steps[0] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Email
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${referral.steps[1] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Twitter
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${referral.steps[2] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Telegram
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${referral.steps[3] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Share
+                      </div>
+                      <div className={`text-xs p-1 text-center rounded ${referral.steps[4] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                        Refer
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground">No referrals yet. Share your link to invite friends!</p>
+            )}
+          </CardContent>
+        )}
       </Card>
 
     </div>

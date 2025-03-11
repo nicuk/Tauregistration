@@ -1,8 +1,10 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Trophy, Medal } from "lucide-react"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { createClientSupabaseClient } from "@/lib/supabase-client"
 
 interface LeaderboardProps {
   rank?: number
@@ -13,9 +15,67 @@ interface LeaderboardProps {
     referrals: number
     earnings?: number
   }>
+  fetchGlobalLeaderboard?: boolean
 }
 
-export function Leaderboard({ rank, totalReferrers, topReferrers = [] }: LeaderboardProps) {
+export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlobalLeaderboard = false }: LeaderboardProps) {
+  const [globalTopReferrers, setGlobalTopReferrers] = useState(topReferrers)
+  const supabase = createClientSupabaseClient()
+  
+  useEffect(() => {
+    if (fetchGlobalLeaderboard) {
+      fetchGlobalLeaderboardData()
+    } else {
+      setGlobalTopReferrers(topReferrers)
+    }
+  }, [fetchGlobalLeaderboard, topReferrers])
+  
+  const fetchGlobalLeaderboardData = async () => {
+    try {
+      // Get top referrers with usernames - this ensures all users see the same data
+      const { data: topReferrers, error: topReferrersError } = await supabase
+        .from("referral_stats")
+        .select("user_id, total_referrals, total_earnings, unlocked_rewards")
+        .order("total_referrals", { ascending: false })
+        .limit(10)
+
+      if (topReferrersError) {
+        console.error("Error fetching top referrers:", topReferrersError)
+        return
+      }
+
+      // Get usernames for top referrers
+      if (topReferrers && topReferrers.length > 0) {
+        const userIds = topReferrers.map((referrer) => referrer.user_id)
+        const { data: profiles, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, username")
+          .in("id", userIds)
+
+        if (profilesError) {
+          console.error("Error fetching profiles for top referrers:", profilesError)
+          return
+        }
+
+        if (profiles) {
+          const processedReferrers = topReferrers.map((referrer) => {
+            const profile = profiles.find((p) => p.id === referrer.user_id)
+            return {
+              id: referrer.user_id,
+              username: profile?.username || "Anonymous",
+              referrals: referrer.total_referrals,
+              earnings: referrer.total_earnings || referrer.unlocked_rewards || 0
+            }
+          })
+          
+          setGlobalTopReferrers(processedReferrers)
+        }
+      }
+    } catch (error) {
+      console.error("Error in fetchGlobalLeaderboardData:", error)
+    }
+  }
+
   return (
     <>
       <CardHeader className="bg-primary/5">
@@ -23,8 +83,8 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [] }: Leaderb
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y">
-          {topReferrers.length > 0 ? (
-            topReferrers.map((referrer, index) => (
+          {globalTopReferrers.length > 0 ? (
+            globalTopReferrers.map((referrer, index) => (
               <motion.div
                 key={referrer.id || referrer.username}
                 initial={{ opacity: 0, x: -20 }}
@@ -53,9 +113,7 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [] }: Leaderb
               </motion.div>
             ))
           ) : (
-            <div className="p-4 text-center text-muted-foreground">
-              No referrals data available yet. Be the first to climb the leaderboard!
-            </div>
+            <div className="p-4 text-center text-muted-foreground">No referrers yet</div>
           )}
         </div>
       </CardContent>
