@@ -321,7 +321,7 @@ export async function POST(request: Request) {
               const { data: referrerData, error: referrerError } = await supabaseAdmin
                 .from("profiles")
                 .select("id, total_referrals, referral_code")
-                .eq("profiles.referral_code", referralCode) // Fix the ambiguous column reference
+                .eq("referral_code", referralCode)
                 .single();
                   
               if (!referrerError && referrerData) {
@@ -336,7 +336,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, referral_code")
-                  .ilike("profiles.referral_code", referralCode) // Fix the ambiguous column reference
+                  .ilike("referral_code", referralCode)
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
@@ -469,7 +469,7 @@ export async function POST(request: Request) {
             const { data: referrerData, error: referrerError } = await supabaseAdmin
               .from("profiles")
               .select("id, total_referrals, referral_code")
-              .eq("profiles.referral_code", referralCode) // Fix the ambiguous column reference
+              .eq("referral_code", referralCode)
               .single();
 
             if (referrerError) {
@@ -481,7 +481,7 @@ export async function POST(request: Request) {
                 const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
                   .from("profiles")
                   .select("id, total_referrals, referral_code")
-                  .ilike("profiles.referral_code", referralCode) // Fix the ambiguous column reference
+                  .ilike("referral_code", referralCode)
                   .limit(1);
                     
                 if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
