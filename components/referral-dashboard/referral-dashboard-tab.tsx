@@ -257,7 +257,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       // Get users referred by this user
       const { data: referrals, error: referralsError } = await supabase
         .from("profiles")
-        .select("id, username, email, twitter_verified, telegram_verified, twitter_shared, first_referral, created_at")
+        .select("id, username, email, twitter_verified, telegram_verified, twitter_shared, first_referral, created_at, email_verified")
         .eq("referred_by", profile.referral_code)
         .order("created_at", { ascending: false })
 
@@ -270,7 +270,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         // Calculate completion percentage and unlocked TAU for each referral
         const processedReferrals = referrals.map((referral: any): ReferredUser => {
           // Check which verification steps are completed
-          const emailVerified = referral.email && referral.email.length > 0
+          const emailVerified = referral.email_verified || false
           const steps = [
             emailVerified,                // Email verification (20%)
             referral.twitter_verified || false, // Twitter verification (20%)
