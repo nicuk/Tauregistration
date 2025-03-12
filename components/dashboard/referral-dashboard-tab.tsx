@@ -153,7 +153,7 @@ export function ReferralDashboardTab({ user, profile }) {
     return (completedSteps / totalSteps) * 100
   }
 
-  const calculateEarnings = (referrals) => {
+  const calculateReferralRewards = (referrals) => {
     return referrals.reduce((acc, ref) => {
       const steps = [
         ref.emailVerified,
@@ -161,10 +161,59 @@ export function ReferralDashboardTab({ user, profile }) {
         ref.telegramVerified,
         ref.twitterShared,
         ref.firstReferralMade,
-      ].filter(Boolean).length
-      return acc + (steps / 5) * 10000
-    }, 0)
-  }
+      ].filter(Boolean).length;
+      
+      // Each step is worth 2,000 TAU
+      return acc + (steps * 2000);
+    }, 0);
+  };
+
+  const calculateMilestoneRewards = (referrals) => {
+    // Count fully verified referrals
+    const fullyVerifiedCount = referrals.reduce((acc, ref) => {
+      const isFullyVerified = [
+        ref.emailVerified,
+        ref.twitterVerified,
+        ref.telegramVerified,
+        ref.twitterShared,
+        ref.firstReferralMade,
+      ].filter(Boolean).length === 5;
+
+      return acc + (isFullyVerified ? 1 : 0);
+    }, 0);
+    
+    // Calculate milestone rewards based on tiers
+    let milestoneRewards = 0;
+    
+    // Check each tier and add the reward if the user has enough verified referrals
+    for (const tier of TIERS) {
+      if (fullyVerifiedCount >= tier.required) {
+        milestoneRewards = tier.reward;
+      } else {
+        // Stop checking higher tiers if the current one isn't met
+        break;
+      }
+    }
+    
+    return milestoneRewards;
+  };
+
+  const calculatePendingRewards = (referrals) => {
+    return referrals.reduce((acc, ref) => {
+      const completedSteps = [
+        ref.emailVerified,
+        ref.twitterVerified,
+        ref.telegramVerified,
+        ref.twitterShared,
+        ref.firstReferralMade,
+      ].filter(Boolean).length;
+      
+      // Each referral can earn up to 10,000 TAU (2,000 per step)
+      const remainingPotential = (5 - completedSteps) * 2000;
+      
+      return acc + remainingPotential;
+    }, 0);
+  };
 
   if (loading) {
     return <div>Loading...</div>
@@ -173,16 +222,20 @@ export function ReferralDashboardTab({ user, profile }) {
   const currentTier = TIERS.find((tier) => stats.totalReferrals < tier.required) || TIERS[TIERS.length - 1]
   const nextTier = TIERS[TIERS.indexOf(currentTier) + 1] || currentTier
 
-  const unlockedAmount = calculateEarnings(stats.referrals)
-  const totalPotential = stats.referrals.length * 10000
-  const unlockedPercentage = Math.round((unlockedAmount / totalPotential) * 100)
+  const referralRewards = calculateReferralRewards(stats.referrals);
+  const milestoneRewards = calculateMilestoneRewards(stats.referrals);
+  const totalEarnings = referralRewards + milestoneRewards;
+  const pendingRewards = calculatePendingRewards(stats.referrals);
+  const unlockedPercentage = stats.referrals.length > 0 
+    ? Math.round((totalEarnings / (totalEarnings + pendingRewards)) * 100) 
+    : 0;
 
   return (
     <div className="space-y-6 bg-[#0F1218] p-6">
       <TotalEarningsCard
-        claimed={unlockedAmount}
-        pending={totalPotential - unlockedAmount}
-        total={totalPotential}
+        referralRewards={referralRewards}
+        milestoneRewards={milestoneRewards}
+        pending={pendingRewards}
         unlockedPercentage={unlockedPercentage}
       />
 
@@ -296,4 +349,3 @@ export function ReferralDashboardTab({ user, profile }) {
     </div>
   )
 }
-
