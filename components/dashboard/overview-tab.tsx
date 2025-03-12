@@ -19,22 +19,22 @@ interface OverviewTabProps {
 const REWARD_BREAKDOWN = [
   {
     action: "Twitter Follow & Verification",
-    amount: 10000,
+    amount: 5000,
     percentage: 29.4,
   },
   {
     action: "Telegram Join & Verification",
-    amount: 8000,
+    amount: 4000,
     percentage: 23.5,
   },
   {
     action: "Twitter Post with #TAUMine",
-    amount: 6000,
+    amount: 3000,
     percentage: 17.6,
   },
   {
     action: "First Referral (who verifies email)",
-    amount: 10000,
+    amount: 5000,
     percentage: 29.5,
   },
 ]
@@ -96,10 +96,10 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
 
   function calculateRewards() {
     let total = 0
-    if (profile.twitter_verified) total += 10000
-    if (profile.telegram_verified) total += 8000
-    if (profile.twitter_shared) total += 6000
-    if (profile.first_referral) total += 10000
+    if (profile.twitter_verified) total += 5000
+    if (profile.telegram_verified) total += 4000
+    if (profile.twitter_shared) total += 3000
+    if (profile.first_referral) total += 5000
     return total
   }
 
@@ -157,7 +157,7 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
                   <InfoIcon className="h-4 w-4 text-muted-foreground hover:text-primary cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="w-80 p-4" side="left">
-                  <p className="font-semibold mb-2">How to earn 34,000 TAU:</p>
+                  <p className="font-semibold mb-2">How to earn 17,000 TAU:</p>
                   <div className="space-y-2">
                     {REWARD_BREAKDOWN.map((reward, index) => (
                       <div key={index} className="flex justify-between text-sm">
@@ -174,7 +174,7 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{rewards.toLocaleString()} TAU</div>
-            <p className="text-xs text-muted-foreground">out of 34,000 TAU</p>
+            <p className="text-xs text-muted-foreground">out of 17,000 TAU</p>
             <div className="mt-4 space-y-2">
               <div className="flex items-center">
                 <Trophy className="h-4 w-4 text-yellow-500 mr-2" />
@@ -184,7 +184,7 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
               <div className="flex items-center">
                 <Trophy className="h-4 w-4 text-primary mr-2" />
                 <div className="text-sm font-medium">Potential Rewards</div>
-                <div className="ml-auto font-medium">34,000 TAU</div>
+                <div className="ml-auto font-medium">17,000 TAU</div>
               </div>
             </div>
           </CardContent>
@@ -213,4 +213,3 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
     </div>
   )
 }
-

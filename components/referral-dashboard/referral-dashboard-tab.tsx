@@ -74,13 +74,13 @@ const cardBgStyle = "bg-[#F8FAFC]"
 
 // Define milestone tiers
 const TIERS = [
-  { tier: 1, reward: 10000, required: 1, badgeTitle: "Community Founder" },
-  { tier: 2, reward: 25000, required: 3, badgeTitle: "Trusted Guide" },
-  { tier: 3, reward: 45000, required: 6, badgeTitle: "Community Leader" },
-  { tier: 4, reward: 100000, required: 12, badgeTitle: "Network Champion" },
-  { tier: 5, reward: 250000, required: 25, badgeTitle: "TAU Ambassador" },
-  { tier: 6, reward: 500000, required: 50, badgeTitle: "TAU Legend" },
-  { tier: 7, reward: 1000000, required: 100, badgeTitle: "TAU Visionary" },
+  { tier: 0, reward: 5000, required: 1, badgeTitle: "Community Founder" },
+  { tier: 1, reward: 12500, required: 3, badgeTitle: "Trusted Guide" },
+  { tier: 2, reward: 22500, required: 6, badgeTitle: "Community Leader" },
+  { tier: 3, reward: 50000, required: 12, badgeTitle: "Network Champion" },
+  { tier: 4, reward: 125000, required: 25, badgeTitle: "TAU Ambassador" },
+  { tier: 5, reward: 250000, required: 50, badgeTitle: "TAU Legend" },
+  { tier: 6, reward: 500000, required: 100, badgeTitle: "TAU Visionary" },
 ]
 
 export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; profile: any }) {
@@ -103,7 +103,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
     unlocked_percentage: 0,
     top_referrers: [],
     progress_to_next_tier: 0,
-    next_tier_reward: 10000,
+    next_tier_reward: 5000,
     referrals_needed: 1,
     total_users: 0,
     referral_details: "",
@@ -132,8 +132,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         ref.first_referral,
       ].filter(Boolean).length;
       
-      // Each step is worth 2,000 TAU
-      return acc + (steps * 2000);
+      // Each step is worth 1000 TAU
+      return acc + (steps * 1000);
     }, 0);
   };
 
@@ -245,6 +245,9 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         // Calculate milestone and referral rewards
         const milestoneRewards = calculateMilestoneRewards(verifiedReferrals)
         const referralRewards = calculateReferralRewards(referredUsers)
+        
+        // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 0
+        const unlocked_percentage = verifiedReferrals >= 1 ? 100 : (verifiedReferrals * 100)
 
         // Update stats state
         setStats({
@@ -254,7 +257,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           current_tier_name: statsData.current_tier_name || currentTierData.badgeTitle || "Pioneer",
           next_tier_name: statsData.next_tier_name || nextTierData.badgeTitle || "Next Tier",
           milestone_rewards: milestoneRewards,
-          referral_rewards: referralRewards
+          referral_rewards: referralRewards,
+          unlocked_percentage: unlocked_percentage
         })
       }
     } catch (error) {
