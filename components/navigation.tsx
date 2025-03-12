@@ -1,17 +1,30 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { createClientSupabaseClient } from "@/lib/supabase-client"
 import { Button } from "@/components/ui/button"
 
 export default function Navigation() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const supabase = createClientSupabaseClient()
-
+  
+  // Check if we're on a registration page with a referral code
+  const isRegisterPage = pathname === "/register"
+  const hasReferralCode = searchParams.has("ref")
+  
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    window.location.href = "/"
+    
+    // If we're on a registration page with a referral code,
+    // redirect back to the same page with the referral code preserved
+    if (isRegisterPage && hasReferralCode) {
+      const referralCode = searchParams.get("ref")
+      window.location.href = `/register?ref=${referralCode}`
+    } else {
+      window.location.href = "/"
+    }
   }
 
   return (
@@ -21,7 +34,10 @@ export default function Navigation() {
           TAUMine
         </Link>
         <div className="space-x-4">
-          {pathname !== "/login" && pathname !== "/" && (
+          {/* Only show Sign Out button if we're not on login, home, or any registration page */}
+          {pathname !== "/login" && 
+           pathname !== "/" && 
+           !isRegisterPage && (
             <Button onClick={handleSignOut} variant="secondary" className="bg-white text-gray-800 hover:bg-gray-100">
               Sign Out
             </Button>
@@ -38,4 +54,3 @@ export default function Navigation() {
     </nav>
   )
 }
-
