@@ -594,14 +594,8 @@ Join me with my referral link: ${referralLink}
 
       {/* Referral Leaderboard */}
       <Card className={cardBgStyle}>
-        <CardHeader>
-          <CardTitle>Referral Leaderboard</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <Leaderboard 
-            topReferrers={stats.top_referrers || []} 
-            rank={stats.rank}
-            totalReferrers={stats.total_users}
             fetchGlobalLeaderboard={true} // Ensure all users see the same global leaderboard
           />
         </CardContent>

@@ -85,13 +85,12 @@ BEGIN
         -- Check if fully verified
         v_is_fully_verified := v_completed_steps = 5;
         
-        -- Calculate rewards
+        -- Calculate referral rewards - each step is worth 2,000 TAU
+        v_referral_rewards := v_referral_rewards + (v_completed_steps * 2000);
+        
+        -- Track fully verified referrals for milestone rewards
         IF v_is_fully_verified THEN
-            -- Count fully verified referrals for milestone rewards
             v_fully_verified_count := v_fully_verified_count + 1;
-        ELSE
-            -- Partially verified referral contributes to referral rewards
-            v_referral_rewards := v_referral_rewards + (v_completed_steps * 2000);
         END IF;
         
         -- Calculate pending rewards
@@ -112,15 +111,13 @@ BEGIN
             (6, 500000, 50),
             (7, 1000000, 100)
         ) AS t(tier, reward, required)
-        ORDER BY tier
+        ORDER BY tier DESC  -- Start from highest tier
     )
     LOOP
         -- Check if the user has enough fully verified referrals for this tier
         IF v_fully_verified_count >= v_tier.required THEN
             v_milestone_rewards := v_tier.reward;
-        ELSE
-            -- Stop checking higher tiers if the current one isn't met
-            EXIT;
+            EXIT;  -- Exit after finding the highest tier achieved
         END IF;
     END LOOP;
     
