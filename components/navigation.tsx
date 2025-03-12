@@ -2,10 +2,12 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 import { createClientSupabaseClient } from "@/lib/supabase-client"
 import { Button } from "@/components/ui/button"
 
-export default function Navigation() {
+// Create a client component that uses the search params
+function NavigationContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const supabase = createClientSupabaseClient()
@@ -28,29 +30,43 @@ export default function Navigation() {
   }
 
   return (
-    <nav className="bg-gray-800 text-white p-4">
-      <div className="max-w-4xl mx-auto flex justify-between items-center">
-        <Link href="/" className="text-xl font-bold">
-          TAUMine
-        </Link>
-        <div className="space-x-4">
-          {/* Only show Sign Out button if we're not on login, home, or any registration page */}
-          {pathname !== "/login" && 
-           pathname !== "/" && 
-           !isRegisterPage && (
-            <Button onClick={handleSignOut} variant="secondary" className="bg-white text-gray-800 hover:bg-gray-100">
-              Sign Out
+    <div className="max-w-4xl mx-auto flex justify-between items-center">
+      <Link href="/" className="text-xl font-bold">
+        TAUMine
+      </Link>
+      <div className="space-x-4">
+        {/* Only show Sign Out button if we're not on login, home, or any registration page */}
+        {pathname !== "/login" && 
+         pathname !== "/" && 
+         !isRegisterPage && (
+          <Button onClick={handleSignOut} variant="secondary" className="bg-white text-gray-800 hover:bg-gray-100">
+            Sign Out
+          </Button>
+        )}
+        {pathname === "/" && (
+          <Link href="/login">
+            <Button variant="secondary" className="bg-white text-gray-800 hover:bg-gray-100">
+              Log In
             </Button>
-          )}
-          {pathname === "/" && (
-            <Link href="/login">
-              <Button variant="secondary" className="bg-white text-gray-800 hover:bg-gray-100">
-                Log In
-              </Button>
-            </Link>
-          )}
-        </div>
+          </Link>
+        )}
       </div>
+    </div>
+  )
+}
+
+// Main navigation component that wraps the content in a Suspense boundary
+export default function Navigation() {
+  return (
+    <nav className="bg-gray-800 text-white p-4">
+      <Suspense fallback={
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <span className="text-xl font-bold">TAUMine</span>
+          <div className="w-20 h-10"></div>
+        </div>
+      }>
+        <NavigationContent />
+      </Suspense>
     </nav>
   )
 }
