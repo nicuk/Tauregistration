@@ -23,26 +23,25 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
   const supabase = createClientSupabaseClient()
   
   useEffect(() => {
-    if (fetchGlobalLeaderboard) {
-      fetchGlobalLeaderboardData()
-    } else {
-      setGlobalTopReferrers(topReferrers)
-    }
-  }, [fetchGlobalLeaderboard, topReferrers])
+    // Always fetch global leaderboard data regardless of the prop
+    fetchGlobalLeaderboardData()
+  }, [])
   
   const fetchGlobalLeaderboardData = async () => {
     try {
       // Get top referrers with usernames - this ensures all users see the same data
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
-        .select("user_id, total_referrals, total_earnings, unlocked_rewards")
-        .order("total_referrals", { ascending: false })
+        .select("user_id, verified_referrals, total_earnings")
+        .order("verified_referrals", { ascending: false })
         .limit(10)
 
       if (topReferrersError) {
         console.error("Error fetching top referrers:", topReferrersError)
         return
       }
+
+      console.log("Fetched top referrers:", topReferrers)
 
       // Get usernames for top referrers
       if (topReferrers && topReferrers.length > 0) {
@@ -57,17 +56,20 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
           return
         }
 
+        console.log("Fetched profiles:", profiles)
+
         if (profiles) {
           const processedReferrers = topReferrers.map((referrer) => {
             const profile = profiles.find((p) => p.id === referrer.user_id)
             return {
               id: referrer.user_id,
               username: profile?.username || "Anonymous",
-              referrals: referrer.total_referrals,
+              referrals: referrer.verified_referrals,
               earnings: referrer.total_earnings || 0
             }
           })
           
+          console.log("Processed referrers:", processedReferrers)
           setGlobalTopReferrers(processedReferrers)
         }
       }
