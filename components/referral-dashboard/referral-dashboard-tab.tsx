@@ -74,13 +74,13 @@ const cardBgStyle = "bg-[#F8FAFC]"
 
 // Define milestone tiers
 const TIERS = [
-  { tier: 0, reward: 5000, required: 1, badgeTitle: "Community Founder" },
-  { tier: 1, reward: 12500, required: 3, badgeTitle: "Trusted Guide" },
-  { tier: 2, reward: 22500, required: 6, badgeTitle: "Community Leader" },
-  { tier: 3, reward: 50000, required: 12, badgeTitle: "Network Champion" },
-  { tier: 4, reward: 125000, required: 25, badgeTitle: "TAU Ambassador" },
-  { tier: 5, reward: 250000, required: 50, badgeTitle: "TAU Legend" },
-  { tier: 6, reward: 500000, required: 100, badgeTitle: "TAU Visionary" },
+  { tier: 1, reward: 5000, required: 1, badgeTitle: "Community Founder" },
+  { tier: 2, reward: 12500, required: 3, badgeTitle: "Trusted Guide" },
+  { tier: 3, reward: 22500, required: 6, badgeTitle: "Community Leader" },
+  { tier: 4, reward: 50000, required: 12, badgeTitle: "Network Champion" },
+  { tier: 5, reward: 125000, required: 25, badgeTitle: "TAU Ambassador" },
+  { tier: 6, reward: 250000, required: 50, badgeTitle: "TAU Legend" },
+  { tier: 7, reward: 500000, required: 100, badgeTitle: "TAU Visionary" },
 ]
 
 export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; profile: any }) {
@@ -156,8 +156,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         ref.first_referral,
       ].filter(Boolean).length;
       
-      // Each referral can earn up to 10,000 TAU (2,000 per step)
-      const remainingPotential = (5 - completedSteps) * 2000;
+      // Each referral can earn up to 5,000 TAU (1,000 per step)
+      const remainingPotential = (5 - completedSteps) * 1000;
       
       return acc + remainingPotential;
     }, 0);
@@ -189,7 +189,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         const { data: topReferrers, error: topReferrersError } = await supabase
           .from("referral_stats")
           .select("user_id, total_referrals, total_earnings, unlocked_rewards")
-          .order("total_referrals", { ascending: false })
+          .order("verified_referrals", { ascending: false })  // Use verified_referrals for ranking
           .limit(10)
 
         if (topReferrersError) {
@@ -226,7 +226,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         const tiers = TIERS
         const verifiedReferrals = statsData.verified_referrals || 0
         
-        // Find the highest completed tier
+        // Find the highest tier the user has achieved
         let currentTierIndex = -1;
         for (let i = 0; i < tiers.length; i++) {
           if (verifiedReferrals >= tiers[i].required) {
@@ -258,7 +258,13 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         const milestoneRewards = calculateMilestoneRewards(verifiedReferrals)
         const referralRewards = calculateReferralRewards(referredUsers)
         
-        // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 0
+        // Calculate total earnings: referral rewards + milestone rewards
+        const totalEarnings = referralRewards + milestoneRewards
+        
+        // Calculate pending rewards
+        const pendingRewards = calculatePendingRewards(referredUsers)
+        
+        // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 1
         const unlocked_percentage = verifiedReferrals >= 1 ? 100 : (verifiedReferrals * 100)
 
         // Update stats state
@@ -273,6 +279,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           current_tier_progress: progressToNextTier,
           milestone_rewards: milestoneRewards,
           referral_rewards: referralRewards,
+          total_earnings: totalEarnings,
+          pending_rewards: pendingRewards,
           unlocked_percentage: unlocked_percentage
         })
       }
@@ -315,7 +323,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           
           // Calculate completion percentage and unlocked TAU (20% per step)
           const completionPercentage = (completedSteps / 5) * 100
-          const unlockedTAU = Math.round((completionPercentage / 100) * 10000)
+          const unlockedTAU = completedSteps * 1000 // 1,000 TAU per step
           
           return {
             ...referral,
@@ -399,8 +407,7 @@ Join me with my referral link: ${referralLink}
     <div className="space-y-8">
       <TotalEarningsCard
         totalEarnings={stats.total_earnings || 0}
-        pendingEarnings={stats.pending_rewards || 0}
-        unlockedPercentage={stats.unlocked_percentage || 0}
+        pendingRewards={stats.pending_rewards || 0}
         milestoneRewards={stats.milestone_rewards || 0}
         referralRewards={stats.referral_rewards || 0}
       />
@@ -448,71 +455,47 @@ Join me with my referral link: ${referralLink}
           <div className="mb-4">
             <div className="flex items-center space-x-2 mb-2">
               <Trophy className="h-5 w-5 text-primary" />
-              <span className="font-semibold">Tier {stats.current_tier}: {stats.current_tier_name}</span>
+              <span className="font-semibold">Tier {currentTierData.tier}: {stats.current_tier_name}</span>
             </div>
-            <p className="text-2xl font-bold">{currentTierData?.reward.toLocaleString()} TAU</p>
-            <div className={`${stats.unlocked_percentage >= 100 ? "bg-green-100 text-green-700" : "bg-primary/20 text-primary"} px-3 py-1 rounded-full text-sm inline-block mt-2`}>
-              {stats.unlocked_percentage >= 100 ? "100%" : `${stats.unlocked_percentage.toFixed(1)}%`} of Maximum Reward Unlocked
+            <div className="text-2xl font-bold mb-2">{currentTierData.reward.toLocaleString()} TAU</div>
+            <div className={`inline-block px-3 py-1 rounded-full text-xs ${stats.current_tier_progress === 100 ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+              {stats.current_tier_progress === 100 ? "100% of Maximum Reward Unlocked" : `${stats.current_tier_progress}% of Maximum Reward Unlocked`}
+            </div>
+            <div className="text-right text-sm text-gray-500 mt-2">
+              {stats.verified_referrals}/{currentTierData.required} verified referrals
             </div>
           </div>
-          
-          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${stats.current_tier_progress}%` }}
-              className={`h-full ${stats.unlocked_percentage >= 100 ? "bg-green-500" : "bg-primary"} rounded-full`}
-            />
-          </div>
-          
-          <div className="mt-2 text-sm text-right">
-            {stats.verified_referrals || 0}/{stats.next_tier > 0 ? 
-              (stats.next_tier === 1 ? 1 : 
-               stats.next_tier === 2 ? 3 : 
-               stats.next_tier === 3 ? 6 : 
-               stats.next_tier === 4 ? 12 : 
-               stats.next_tier === 5 ? 25 : 
-               stats.next_tier === 6 ? 50 : 100) : 1} verified referrals
-          </div>
-          
+
           <AnimatePresence>
-            {showNextMilestone && stats.referrals_needed > 0 && (
+            {showNextMilestone && nextTierData && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
+                className="border-t pt-4 mt-4"
               >
-                <div className="mt-6 pt-4 border-t border-border">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Trophy className="h-5 w-5 text-muted-foreground" />
-                    <span className="font-semibold text-muted-foreground">Next: Tier {stats.next_tier}: {stats.next_tier_name}</span>
+                <div className="flex items-center space-x-2 mb-2">
+                  <Trophy className="h-5 w-5 text-gray-400" />
+                  <span className="font-semibold text-gray-700">Next: Tier {nextTierData.tier}: {stats.next_tier_name}</span>
+                </div>
+                <div className="text-2xl font-bold mb-2 text-gray-700">{nextTierData.reward.toLocaleString()} TAU</div>
+                
+                {/* Progress to next tier */}
+                <div className="mt-4">
+                  <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${stats.current_tier_progress}%` }}
+                      className="h-full bg-blue-500"
+                    />
                   </div>
-                  <p className="text-xl font-bold text-muted-foreground">{nextTierData?.reward.toLocaleString()} TAU</p>
-                  <p className="mt-4 text-center text-lg">
-                    {stats.referrals_needed > 0 ? (
-                      <>
-                        {stats.referrals_needed} more verified {stats.referrals_needed === 1 ? 'referral' : 'referrals'} to reach Tier {stats.next_tier}
-                      </>
-                    ) : (
-                      <>Tier {stats.current_tier} completed! You've reached the highest milestone.</>
-                    )}
-                  </p>
+                  <div className="text-center text-sm text-gray-500 mt-2">
+                    {stats.referrals_needed} more verified referrals to reach Tier {nextTierData.tier}
+                  </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-          
-          {!showNextMilestone && stats.referrals_needed > 0 && (
-            <p className="mt-4 text-center text-lg">
-              {stats.referrals_needed} more verified {stats.referrals_needed === 1 ? 'referral' : 'referrals'} to reach Tier {stats.next_tier}: {stats.next_tier_name}
-            </p>
-          )}
-          
-          {stats.referrals_needed === 0 && (
-            <p className="mt-4 text-center text-lg">
-              Tier {stats.current_tier} completed! You've reached the highest milestone.
-            </p>
-          )}
         </CardContent>
       </Card>
 

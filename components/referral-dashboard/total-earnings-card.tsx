@@ -1,86 +1,83 @@
 "use client"
 
-import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Coins, TrendingUp, Unlock, Clock, Award, Users } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { motion } from "framer-motion"
+import { useState } from "react"
+import { ChevronDown, CircleDollarSign, Coins, Gem } from "lucide-react"
 
-interface TotalEarningsProps {
+interface TotalEarningsCardProps {
   totalEarnings: number
-  pendingEarnings: number
-  unlockedPercentage: number
-  milestoneRewards?: number
-  referralRewards?: number
+  pendingRewards: number
+  milestoneRewards: number
+  referralRewards: number
+  className?: string
 }
 
-export function TotalEarningsCard({ 
-  totalEarnings, 
-  pendingEarnings, 
-  unlockedPercentage,
-  milestoneRewards = 0,
-  referralRewards = 0
-}: TotalEarningsProps) {
+export function TotalEarningsCard({
+  totalEarnings,
+  pendingRewards,
+  milestoneRewards,
+  referralRewards,
+  className,
+}: TotalEarningsCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
-    <Card className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white">
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
-          <Coins className="h-5 w-5" />
-          <span>Total Earnings</span>
+    <Card className={cn("relative overflow-hidden", className)}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CircleDollarSign className="h-4 w-4 text-primary" />
+            Total Earnings
+          </div>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                isExpanded ? "rotate-180" : ""
+              )}
+            />
+          </button>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="text-3xl font-bold">{totalEarnings.toLocaleString()} TAU</div>
+        <div className="text-2xl font-bold">{totalEarnings.toLocaleString()} TAU</div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Pending: {pendingRewards.toLocaleString()} TAU
+        </p>
 
-          {/* Reward Types */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="flex items-center space-x-1 mb-1">
-                <Award className="h-4 w-4 text-yellow-300" />
-                <p className="text-sm opacity-70">Milestone Rewards</p>
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{
+            height: isExpanded ? "auto" : 0,
+            opacity: isExpanded ? 1 : 0,
+          }}
+          transition={{ duration: 0.3 }}
+          className="overflow-hidden"
+        >
+          <div className="pt-4 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <Gem className="h-4 w-4 text-blue-500" />
+                <span>Milestone Rewards</span>
               </div>
-              <p className="text-lg font-semibold">{milestoneRewards.toLocaleString()} TAU</p>
+              <span>{milestoneRewards.toLocaleString()} TAU</span>
             </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="flex items-center space-x-1 mb-1">
-                <Users className="h-4 w-4 text-blue-300" />
-                <p className="text-sm opacity-70">Referral Rewards</p>
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4 text-yellow-500" />
+                <span>Referral Rewards</span>
               </div>
-              <p className="text-lg font-semibold">{referralRewards.toLocaleString()} TAU</p>
+              <span>{referralRewards.toLocaleString()} TAU</span>
             </div>
-          </div>
-
-          {/* Unlocked and Pending */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="flex items-center space-x-1 mb-1">
-                <Unlock className="h-4 w-4 text-green-300" />
-                <p className="text-sm opacity-70">Total Earnings</p>
-              </div>
-              <p className="text-lg font-semibold">{totalEarnings.toLocaleString()} TAU</p>
+            <div className="text-xs text-muted-foreground mt-2">
+              <p>Each verification step is worth 1,000 TAU per referral.</p>
+              <p>Milestone rewards are earned based on your tier level.</p>
             </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="flex items-center space-x-1 mb-1">
-                <Clock className="h-4 w-4 text-orange-300" />
-                <p className="text-sm opacity-70">Pending</p>
-              </div>
-              <p className="text-lg font-semibold">{pendingEarnings.toLocaleString()} TAU</p>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div>
-            <div className="flex justify-between mb-1">
-              <p className="text-sm opacity-70">Unlocked Percentage</p>
-              <p className="text-sm font-medium">{unlockedPercentage.toFixed(1)}%</p>
-            </div>
-            <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${unlockedPercentage}%` }}
-                className="h-full bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"
-              />
-            </div>
-            <p className="text-xs mt-1 opacity-60">Each verification step unlocks 20% of rewards</p>
           </div>
         </motion.div>
       </CardContent>
