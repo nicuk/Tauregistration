@@ -64,7 +64,7 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
               id: referrer.user_id,
               username: profile?.username || "Anonymous",
               referrals: referrer.total_referrals,
-              earnings: referrer.total_earnings || referrer.unlocked_rewards || 0
+              earnings: referrer.total_earnings || 0
             }
           })
           

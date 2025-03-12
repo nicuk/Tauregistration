@@ -6,7 +6,6 @@ import { Coins, TrendingUp, Unlock, Clock, Award, Users } from "lucide-react"
 
 interface TotalEarningsProps {
   totalEarnings: number
-  unlockedEarnings: number
   pendingEarnings: number
   unlockedPercentage: number
   milestoneRewards?: number
@@ -15,7 +14,6 @@ interface TotalEarningsProps {
 
 export function TotalEarningsCard({ 
   totalEarnings, 
-  unlockedEarnings, 
   pendingEarnings, 
   unlockedPercentage,
   milestoneRewards = 0,
@@ -51,40 +49,38 @@ export function TotalEarningsCard({
             </div>
           </div>
 
-          {/* Unlocked vs Pending */}
+          {/* Unlocked and Pending */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/10 rounded-lg p-3">
               <div className="flex items-center space-x-1 mb-1">
                 <Unlock className="h-4 w-4 text-green-300" />
-                <p className="text-sm opacity-70">Unlocked</p>
+                <p className="text-sm opacity-70">Total Earnings</p>
               </div>
-              <p className="text-lg font-semibold">{unlockedEarnings.toLocaleString()} TAU</p>
+              <p className="text-lg font-semibold">{totalEarnings.toLocaleString()} TAU</p>
             </div>
             <div className="bg-white/10 rounded-lg p-3">
               <div className="flex items-center space-x-1 mb-1">
-                <Clock className="h-4 w-4 text-amber-300" />
+                <Clock className="h-4 w-4 text-orange-300" />
                 <p className="text-sm opacity-70">Pending</p>
               </div>
               <p className="text-lg font-semibold">{pendingEarnings.toLocaleString()} TAU</p>
             </div>
           </div>
 
-          <div className="flex flex-col space-y-2">
-            <div className="flex justify-between items-center text-sm">
-              <span>Unlocked Percentage</span>
-              <span>{unlockedPercentage.toFixed(1)}%</span>
+          {/* Progress Bar */}
+          <div>
+            <div className="flex justify-between mb-1">
+              <p className="text-sm opacity-70">Unlocked Percentage</p>
+              <p className="text-sm font-medium">{unlockedPercentage.toFixed(1)}%</p>
             </div>
             <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${unlockedPercentage}%` }}
-                className="h-full bg-green-400 rounded-full"
+                className="h-full bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"
               />
             </div>
-            <div className="flex items-center text-green-400 text-sm">
-              <TrendingUp className="h-4 w-4 mr-1" />
-              <span>Each verification step unlocks 20% of rewards</span>
-            </div>
+            <p className="text-xs mt-1 opacity-60">Each verification step unlocks 20% of rewards</p>
           </div>
         </motion.div>
       </CardContent>

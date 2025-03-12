@@ -72,6 +72,17 @@ interface TopReferrer {
 
 const cardBgStyle = "bg-[#F8FAFC]"
 
+// Define milestone tiers
+const TIERS = [
+  { tier: 1, reward: 10000, required: 1, badgeTitle: "Community Founder" },
+  { tier: 2, reward: 25000, required: 3, badgeTitle: "Trusted Guide" },
+  { tier: 3, reward: 45000, required: 6, badgeTitle: "Community Leader" },
+  { tier: 4, reward: 100000, required: 12, badgeTitle: "Network Champion" },
+  { tier: 5, reward: 250000, required: 25, badgeTitle: "TAU Ambassador" },
+  { tier: 6, reward: 500000, required: 50, badgeTitle: "TAU Legend" },
+  { tier: 7, reward: 1000000, required: 100, badgeTitle: "TAU Visionary" },
+]
+
 export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; profile: any }) {
   const [stats, setStats] = useState<ReferralStats>({
     user_id: "",
@@ -111,37 +122,45 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
     fetchReferredUsers()
   }, [])
 
-  const calculateMilestoneRewards = (verifiedReferrals: number) => {
-    // Determine current tier based on verified referrals
-    const tiers = [
-      { tier: 1, required: 1, reward: 10000, name: "Community Founder" },
-      { tier: 2, required: 3, reward: 25000, name: "Community Builder" },
-      { tier: 3, required: 6, reward: 45000, name: "Community Leader" },
-      { tier: 4, required: 12, reward: 100000, name: "Community Champion" },
-      { tier: 5, required: 25, reward: 250000, name: "Community Visionary" },
-      { tier: 6, required: 50, reward: 500000, name: "Community Luminary" },
-      { tier: 7, required: 100, reward: 1000000, name: "Community Legend" }
-    ]
-    
-    // Find the highest tier the user has achieved
-    const achievedTier = tiers.filter(tier => verifiedReferrals >= tier.required)
-                             .sort((a, b) => b.tier - a.tier)[0]
-    
-    return achievedTier ? achievedTier.reward : 0
-  }
+  const calculateReferralRewards = (referrals: ReferredUser[]) => {
+    return referrals.reduce((acc, ref) => {
+      const steps = [
+        ref.email_verified,
+        ref.twitter_verified,
+        ref.telegram_verified,
+        ref.twitter_shared,
+        ref.first_referral,
+      ].filter(Boolean).length;
+      
+      // Each step is worth 2,000 TAU
+      return acc + (steps * 2000);
+    }, 0);
+  };
 
-  const calculateReferralRewards = (referredUsers: ReferredUser[]) => {
-    // Each referral can earn up to 10,000 TAU (20% per verification step)
-    return referredUsers.reduce((total, user) => {
-      // Count completed steps
-      const completedSteps = user.steps ? user.steps.filter(Boolean).length : 0
+  const calculateMilestoneRewards = (verifiedReferrals: number) => {
+    // Find the highest tier the user has achieved
+    const achievedTiers = TIERS.filter(tier => verifiedReferrals >= tier.required);
+    const highestTier = achievedTiers.length > 0 ? achievedTiers[achievedTiers.length - 1] : null;
+    
+    return highestTier ? highestTier.reward : 0;
+  };
+
+  const calculatePendingRewards = (referrals: ReferredUser[]) => {
+    return referrals.reduce((acc, ref) => {
+      const completedSteps = [
+        ref.email_verified,
+        ref.twitter_verified,
+        ref.telegram_verified,
+        ref.twitter_shared,
+        ref.first_referral,
+      ].filter(Boolean).length;
       
-      // Each step is worth 20% of 10,000 TAU
-      const userReward = completedSteps * 0.2 * 10000
+      // Each referral can earn up to 10,000 TAU (2,000 per step)
+      const remainingPotential = (5 - completedSteps) * 2000;
       
-      return total + userReward
-    }, 0)
-  }
+      return acc + remainingPotential;
+    }, 0);
+  };
 
   const fetchReferralStats = async () => {
     try {
@@ -203,35 +222,28 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         }
 
         // Determine current tier and next tier
-        const tiers = [
-          { tier: 1, required: 1, reward: 10000, name: "Community Founder" },
-          { tier: 2, required: 3, reward: 25000, name: "Community Builder" },
-          { tier: 3, required: 6, reward: 45000, name: "Community Leader" },
-          { tier: 4, required: 12, reward: 100000, name: "Community Champion" },
-          { tier: 5, required: 25, reward: 250000, name: "Community Visionary" },
-          { tier: 6, required: 50, reward: 500000, name: "Community Luminary" },
-          { tier: 7, required: 100, reward: 1000000, name: "Community Legend" }
-        ]
-
-        // Use verified referrals for tier determination
+        const tiers = TIERS
         const verifiedReferrals = statsData.verified_referrals || 0
         const currentTierIndex = tiers.findIndex((t) => t.required > verifiedReferrals)
         const tierIndex = currentTierIndex === -1 ? 6 : currentTierIndex - 1
-        const currentTier = tierIndex >= 0 ? tierIndex + 1 : 0
-        const nextTier = currentTier < 7 ? currentTier + 1 : 7
-
-        // Get current and next tier data
-        const currentTierData = currentTier > 0 ? tiers[currentTier - 1] : { tier: 0, required: 0, name: "", reward: 0 }
-        const nextTierData = nextTier > 0 ? tiers[nextTier - 1] : currentTierData
-
+        
+        const currentTierData = tiers[tierIndex >= 0 ? tierIndex : 0]
+        const nextTierData = tiers[currentTierIndex !== -1 ? currentTierIndex : 6]
+        
+        const currentTier = currentTierData.tier
+        const nextTier = nextTierData.tier
+        
+        // Calculate progress to next tier
+        const currentTierRequired = currentTierData.required
+        const nextTierRequired = nextTierData.required
+        const progressToNextTier = ((verifiedReferrals - currentTierRequired) / (nextTierRequired - currentTierRequired)) * 100
+        const currentTierProgress = Math.min(Math.max(progressToNextTier, 0), 100)
+        
         // Calculate referrals needed for next tier
-        const nextThreshold = nextTier > 0 ? nextTierData.required : tiers[0].required
-        const referralsNeeded = Math.max(0, nextThreshold - verifiedReferrals)
-
-        // Calculate milestone rewards
+        const referralsNeeded = Math.max(0, nextTierRequired - verifiedReferrals)
+        
+        // Calculate milestone and referral rewards
         const milestoneRewards = calculateMilestoneRewards(verifiedReferrals)
-
-        // Calculate referral rewards
         const referralRewards = calculateReferralRewards(referredUsers)
 
         // Update stats state
@@ -239,8 +251,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           ...statsData,
           top_referrers: topReferrersWithUsernames,
           referrals_needed: referralsNeeded,
-          current_tier_name: statsData.current_tier_name || currentTierData.name,
-          next_tier_name: statsData.next_tier_name || nextTierData.name,
+          current_tier_name: statsData.current_tier_name || currentTierData.badgeTitle || "Pioneer",
+          next_tier_name: statsData.next_tier_name || nextTierData.badgeTitle || "Next Tier",
           milestone_rewards: milestoneRewards,
           referral_rewards: referralRewards
         })
@@ -357,10 +369,9 @@ Join me with my referral link: ${referralLink}
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <TotalEarningsCard
-        totalEarnings={stats.total_earnings}
-        unlockedEarnings={stats.unlocked_rewards || 0}
+        totalEarnings={stats.total_earnings || 0}
         pendingEarnings={stats.pending_rewards || 0}
         unlockedPercentage={stats.unlocked_percentage || 0}
         milestoneRewards={stats.milestone_rewards || 0}
