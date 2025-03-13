@@ -28,6 +28,7 @@ export interface ReferralData {
     referrals: number
     earnings?: number
   }>
+  userId?: string
 }
 
 interface ReferralDashboardProps {
@@ -55,6 +56,7 @@ export function ReferralDashboard({ data }: ReferralDashboardProps) {
             rank={data.rank} 
             totalReferrers={data.totalReferrers} 
             topReferrers={data.topReferrers}
+            userId={data.userId}
           />
         </Card>
       </div>

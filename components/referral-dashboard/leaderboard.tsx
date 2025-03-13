@@ -1,10 +1,17 @@
-"use client"
-
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
 import { Trophy, Medal } from "lucide-react"
-import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClientSupabaseClient } from "@/lib/supabase-client"
+import { Skeleton } from "@/components/ui/skeleton"
+
+interface LeaderboardItem {
+  user_id: string;
+  username: string;
+  verified_referrals: number;
+  total_earnings: string;
+  referral_rewards: number;
+  milestone_rewards: number;
+}
 
 interface LeaderboardProps {
   rank?: number
@@ -29,122 +36,127 @@ interface LeaderboardProps {
 
 export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlobalLeaderboard = false, globalTopReferrers, userId }: LeaderboardProps) {
   const [globalTopReferrersState, setGlobalTopReferrers] = useState(globalTopReferrers || topReferrers)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClientSupabaseClient()
-  
+
   useEffect(() => {
     // Always fetch global leaderboard data regardless of the prop
     fetchGlobalLeaderboardData()
-    
+
     // Set up interval to refresh data every 60 seconds
     const interval = setInterval(() => {
       fetchGlobalLeaderboardData()
     }, 60000)
-    
+
     // Clean up interval on component unmount
     return () => clearInterval(interval)
   }, [])
-  
+
   const fetchGlobalLeaderboardData = async () => {
     try {
       console.log("Fetching global leaderboard data...")
-      // Get top referrers with usernames - this ensures all users see the same data
-      const { data: topReferrers, error: topReferrersError } = await supabase
-        .from("referral_stats")
-        .select("user_id, verified_referrals, total_earnings, referral_rewards")
-        .order("total_earnings", { ascending: false }) // Sort by total TAU earned first
-        .order("verified_referrals", { ascending: false }) // Then by verified referrals as secondary criteria
+
+      // Use the get_leaderboard() function instead of querying the view directly
+      // This function has SECURITY DEFINER privileges to access the data
+      const { data: leaderboardData, error: leaderboardError } = await supabase
+        .rpc('get_leaderboard')
         .limit(10)
 
-      if (topReferrersError) {
-        console.error("Error fetching top referrers:", topReferrersError)
+      if (leaderboardError) {
+        console.error("Error fetching leaderboard data:", leaderboardError)
+        setError(leaderboardError.message || 'Failed to load leaderboard')
+        setLoading(false)
         return
       }
 
-      console.log("Fetched top referrers:", topReferrers)
+      console.log("Fetched leaderboard data:", leaderboardData)
 
-      // Get usernames for top referrers
-      if (topReferrers && topReferrers.length > 0) {
-        const userIds = topReferrers.map((referrer) => referrer.user_id)
-        
-        // Use a more efficient approach - fetch all profiles for the top referrers
-        const { data: profiles, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, username")
-          .in('id', userIds);
+      if (leaderboardData && leaderboardData.length > 0) {
+        const processedReferrers = leaderboardData.map((referrer: LeaderboardItem) => {
+          return {
+            id: referrer.user_id,
+            username: referrer.username || "Anonymous",
+            referrals: referrer.verified_referrals,
+            referralRewards: referrer.referral_rewards || 0,
+            earnings: parseFloat(referrer.total_earnings) || 0
+          }
+        })
 
-        if (profilesError) {
-          console.error("Error fetching profiles for top referrers:", profilesError)
-          return
-        }
-
-        console.log("Fetched profiles for top referrers:", profiles)
-
-        if (profiles) {
-          const processedReferrers = topReferrers.map((referrer) => {
-            const profile = profiles.find((p: any) => p.id === referrer.user_id)
-            return {
-              id: referrer.user_id,
-              username: profile?.username || "Anonymous",
-              referrals: referrer.verified_referrals,
-              referralRewards: referrer.referral_rewards || 0,
-              earnings: parseFloat(referrer.total_earnings) || 0
-            }
-          })
-          
-          console.log("Processed referrers:", processedReferrers)
-          setGlobalTopReferrers(processedReferrers)
-        }
+        console.log("Processed referrers:", processedReferrers)
+        setGlobalTopReferrers(processedReferrers)
+        setError(null)
       }
-    } catch (error) {
-      console.error("Error in fetchGlobalLeaderboardData:", error)
+      setLoading(false)
+    } catch (err: any) {
+      console.error("Error in fetchGlobalLeaderboardData:", err)
+      setError(err.message || 'Failed to load leaderboard')
+      setLoading(false)
     }
   }
 
+  const formatNumber = (num: number) => {
+    return num.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  }
+
+  const getTrophyIcon = (position: number) => {
+    if (position === 0) return <Trophy className="h-5 w-5 text-yellow-500" />
+    if (position === 1) return <Trophy className="h-5 w-5 text-gray-400" />
+    if (position === 2) return <Trophy className="h-5 w-5 text-amber-700" />
+    return null
+  }
+
   return (
-    <>
-      <CardHeader className="bg-primary/5">
-        <CardTitle className="text-lg font-semibold">Top Referrers</CardTitle>
+    <Card className="col-span-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-xl font-bold">Leaderboard</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y">
-          {globalTopReferrersState.length > 0 ? (
-            globalTopReferrersState.map((referrer, index) => (
-              <motion.div
-                key={referrer.id || referrer.username}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex items-center justify-between p-4"
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center justify-between py-2">
+                <Skeleton className="h-4 w-[250px]" />
+                <Skeleton className="h-4 w-[100px]" />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-4 text-red-500">{error}</div>
+        ) : globalTopReferrersState.length === 0 ? (
+          <div className="text-center py-4 text-gray-500">No data available</div>
+        ) : (
+          <div className="space-y-2">
+            {globalTopReferrersState.map((referrer, index) => (
+              <div
+                key={referrer.id}
+                className={`flex items-center justify-between py-2 px-3 rounded-md ${
+                  referrer.id === userId ? "bg-blue-50" : ""
+                }`}
               >
-                <div className="flex items-center space-x-3">
-                  {index === 0 ? (
-                    <Trophy className="h-5 w-5 text-yellow-500" />
-                  ) : index === 1 ? (
-                    <Medal className="h-5 w-5 text-gray-400" />
-                  ) : index === 2 ? (
-                    <Medal className="h-5 w-5 text-amber-600" />
-                  ) : (
-                    <div className="flex h-5 w-5 items-center justify-center font-medium text-muted-foreground">
-                      {index + 1}
-                    </div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-medium">{index + 1}.</span>
+                  {getTrophyIcon(index)}
+                  <span className={`${referrer.id === userId ? "font-semibold" : ""}`}>
+                    {referrer.username}
+                  </span>
+                  {referrer.id === userId && (
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                      You
+                    </span>
                   )}
-                  <span className="font-medium">{referrer.username}</span>
                 </div>
-                <div className="flex flex-col items-end">
-                  <span className="tabular-nums text-primary">
-                    {(referrer.earnings || 0).toLocaleString()} TAU
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {referrer.referrals || 0} verified referrals
-                  </span>
+                <div className="flex space-x-4">
+                  <div className="text-right">
+                    <div className="text-sm font-medium">{formatNumber(referrer.earnings)} TAU</div>
+                    <div className="text-xs text-gray-500">{referrer.referrals} verified referrals</div>
+                  </div>
                 </div>
-              </motion.div>
-            ))
-          ) : (
-            <div className="p-4 text-center text-muted-foreground">No referrers yet</div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
-    </>
+    </Card>
   )
 }
