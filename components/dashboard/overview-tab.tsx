@@ -46,36 +46,39 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
-    // Fetch personal rewards from the database
+    // Fetch personal rewards from the profiles table
     const fetchPersonalRewards = async () => {
       setIsLoading(true)
       try {
-        const { data, error } = await supabase
-          .from('referral_stats')
-          .select('personal_rewards')
-          .eq('user_id', user.id)
-          .single()
-        
-        if (error) {
-          console.error('Error fetching personal rewards:', error)
-          // Fall back to local calculation if there's an error
-          setPersonalRewards(calculateRewards())
-        } else if (data) {
-          setPersonalRewards(data.personal_rewards)
+        // Personal rewards are now stored directly in the profiles table
+        if (profile && profile.personal_rewards !== null && profile.personal_rewards !== undefined) {
+          setPersonalRewards(profile.personal_rewards)
         } else {
-          // If no data found, fall back to local calculation
-          setPersonalRewards(calculateRewards())
+          // Fall back to calculating locally if personal_rewards is not available
+          calculatePersonalRewardsLocally()
         }
       } catch (error) {
         console.error('Error in personal rewards fetch:', error)
-        setPersonalRewards(calculateRewards())
+        // Fall back to calculating locally if there's an exception
+        calculatePersonalRewardsLocally()
       } finally {
         setIsLoading(false)
       }
     }
 
+    // Fallback function to calculate rewards locally if database fetch fails
+    const calculatePersonalRewardsLocally = () => {
+      let total = 0
+      if (profile.twitter_verified) total += 5000
+      if (profile.telegram_verified) total += 4000
+      if (profile.twitter_shared) total += 3000
+      if (profile.first_referral) total += 5000
+      
+      setPersonalRewards(total)
+    }
+
     fetchPersonalRewards()
-  }, [user.id, profile])
+  }, [profile])
 
   const handleResendEmail = async () => {
     setResending(true)
@@ -127,16 +130,6 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
 
   const progress = calculateProgress()
 
-  // This function is kept as a fallback in case the database fetch fails
-  function calculateRewards() {
-    let total = 0
-    if (profile.twitter_verified) total += 5000
-    if (profile.telegram_verified) total += 4000
-    if (profile.twitter_shared) total += 3000
-    if (profile.first_referral) total += 5000
-    return total
-  }
-
   return (
     <div className="space-y-6">
       {!user.email_confirmed_at && <EmailVerificationBox email={user.email} />}
@@ -168,7 +161,13 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
                   <InfoIcon className="h-4 w-4 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p className="max-w-xs">Verify Your Email To Secure TAU Token</p>
+                  <p className="max-w-xs">Complete verification steps to earn TAU rewards:</p>
+                  <ul className="text-xs mt-1">
+                    <li>Twitter Follow: 5,000 TAU</li>
+                    <li>Telegram Join: 4,000 TAU</li>
+                    <li>Twitter Share: 3,000 TAU</li>
+                    <li>First Referral: 5,000 TAU</li>
+                  </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
