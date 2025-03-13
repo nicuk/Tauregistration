@@ -41,9 +41,8 @@ export function VerificationSuccessState({ type, handle, reward, verifiedAt }: V
       </motion.div>
 
       <p className="text-xs text-green-500 mt-3">
-        Verified on {verifiedAt ? new Date(verifiedAt).toLocaleDateString() : "Recently"}
+        Verified on {verifiedAt ? (isNaN(Date.parse(verifiedAt)) ? "Recently" : new Date(verifiedAt).toLocaleDateString()) : "Recently"}
       </p>
     </motion.div>
   )
 }
-

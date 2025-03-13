@@ -12,6 +12,7 @@ import { createClientSupabaseClient } from "@/lib/supabase-client"
 import { logError, wrapWithErrorHandler } from "@/utils/debug"
 import { VerificationAlert } from "@/components/verification-alert"
 import { VerificationSuccessModal } from "@/components/verification-success-modal"
+import { VerificationWarning } from "@/components/verification-warning"
 import { RewardTooltip } from "@/components/ui/reward-tooltip"
 import { motion } from "framer-motion"
 
@@ -250,7 +251,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
       </motion.div>
 
       <p className="text-xs text-green-500 mt-3">
-        Verified on {new Date(profile.twitter_verified_at).toLocaleDateString()}
+        Verified on {profile.twitter_verified_at ? (isNaN(Date.parse(profile.twitter_verified_at)) ? "Recently" : new Date(profile.twitter_verified_at).toLocaleDateString()) : "Recently"}
       </p>
     </motion.div>
   )
@@ -282,7 +283,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
       </motion.div>
 
       <p className="text-xs text-green-500 mt-3">
-        Verified on {new Date(profile.telegram_verified_at).toLocaleDateString()}
+        Verified on {profile.telegram_verified_at ? (isNaN(Date.parse(profile.telegram_verified_at)) ? "Recently" : new Date(profile.telegram_verified_at).toLocaleDateString()) : "Recently"}
       </p>
     </motion.div>
   )
@@ -295,6 +296,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
     return (
       <>
         <p className="mb-4">Verify your Twitter account to earn 5,000 TAU</p>
+        <VerificationWarning type="twitter" />
         <ol className="list-decimal list-inside space-y-2 mb-4">
           <li>
             Follow{" "}
@@ -344,6 +346,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
     return (
       <>
         <p className="mb-4">Verify your Telegram account to earn 4,000 TAU</p>
+        <VerificationWarning type="telegram" />
         <ol className="list-decimal list-inside space-y-2 mb-4">
           <li>
             Join the{" "}
