@@ -47,27 +47,34 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
       if (topReferrers && topReferrers.length > 0) {
         const userIds = topReferrers.map((referrer) => referrer.user_id)
         
-        // Fetch ALL profiles to ensure we get usernames for everyone
-        const { data: profiles, error: profilesError } = await supabase
+        // Use a more efficient approach - fetch only the profiles we need using OR conditions
+        let query = supabase
           .from("profiles")
-          .select("id, username")
-          // Don't filter by user IDs to ensure we get all profiles
-          // This is a temporary fix until the database schema is updated
+          .select("id, username");
+          
+        // Add OR conditions for each user ID (up to 10 max)
+        if (userIds.length > 0) {
+          // First user ID
+          query = query.eq('id', userIds[0]);
+          
+          // Add OR conditions for remaining user IDs
+          for (let i = 1; i < userIds.length; i++) {
+            query = query.or(`id.eq.${userIds[i]}`);
+          }
+        }
+        
+        const { data: profiles, error: profilesError } = await query;
 
         if (profilesError) {
           console.error("Error fetching profiles for top referrers:", profilesError)
           return
         }
 
-        console.log("Fetched profiles:", profiles)
+        console.log("Fetched profiles for top referrers:", profiles)
 
         if (profiles) {
-          // Filter profiles to only include those in our top referrers
-          const relevantProfiles = profiles.filter((p: any) => userIds.includes(p.id));
-          console.log("Relevant profiles for top referrers:", relevantProfiles);
-          
           const processedReferrers = topReferrers.map((referrer) => {
-            const profile = relevantProfiles.find((p) => p.id === referrer.user_id)
+            const profile = profiles.find((p: any) => p.id === referrer.user_id)
             return {
               id: referrer.user_id,
               username: profile?.username || "Anonymous",
