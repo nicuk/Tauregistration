@@ -115,7 +115,7 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
     {
       icon: Users,
       label: "1st Verified Ref",
-      done: profile.first_referral || profile.completedVerifications > 0,
+      done: profile.first_referral,
     },
   ]
 
@@ -124,7 +124,7 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
     if (profile.twitter_verified) steps++
     if (profile.telegram_verified) steps++
     if (profile.twitter_shared) steps++
-    if (profile.first_referral || profile.completedVerifications > 0) steps++
+    if (profile.first_referral) steps++
     return (steps / 4) * 100
   }
 
