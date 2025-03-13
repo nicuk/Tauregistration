@@ -119,9 +119,15 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
-    fetchReferralStats()
-    fetchReferredUsers()
-  }, [])
+    if (user?.id) {
+      console.log("User ID is available, fetching data:", user.id);
+      fetchReferralStats();
+      fetchReferredUsers();
+    } else {
+      console.error("User ID is missing or undefined!");
+      setErrorMessage("User authentication error. Please try logging in again.");
+    }
+  }, [user?.id]);
 
   const calculateReferralRewards = (referrals: ReferredUser[]) => {
     return referrals.reduce((acc, ref) => {
@@ -167,6 +173,13 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
     try {
       setLoading(true)
       
+      // Ensure we have a valid user ID before proceeding
+      if (!user?.id) {
+        console.error("Cannot fetch referral stats: User ID is missing");
+        setErrorMessage("User authentication error. Please try logging in again.");
+        return;
+      }
+      
       // Get referral stats for this user
       const { data: statsData, error: statsError } = await supabase
         .from("referral_stats")
@@ -182,6 +195,10 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
 
       // Debug output to see what's coming from the database
       console.log("Stats data from database:", statsData);
+      console.log("User ID being used for query:", user?.id);
+
+      // Debug the raw data
+      console.log("Raw statsData:", JSON.stringify(statsData));
 
       // Get top referrers
       const { data: topReferrers, error: topReferrersError } = await supabase
@@ -201,6 +218,17 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       }))
 
       if (statsData) {
+        // CRITICAL: Handle the case where statsData exists but might be empty or have null values
+        if (!statsData.total_referrals && !statsData.verified_referrals && !statsData.milestone_rewards && 
+            !statsData.referral_rewards && !statsData.total_earnings) {
+          console.warn("Stats data exists but contains empty/null values:", statsData);
+          
+          // If we have referred users but empty stats, we should calculate values
+          if (referredUsers.length > 0) {
+            console.log("Using calculated values from referred users instead");
+          }
+        }
+        
         // Calculate verified referrals
         const verifiedReferrals = statsData.verified_referrals || 0
         
@@ -297,6 +325,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         
         // Update stats state
         setStats({
+          user_id: user?.id || "",
           total_referrals: statsData.total_referrals || 0,
           verified_referrals: verifiedReferrals,
           active_referrals: statsData.active_referrals || 0,
@@ -312,12 +341,14 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           referrals_needed: referralsNeeded,
           total_users: statsData.total_users || 0,
           referral_details: statsData.referral_details || "",
-          milestone_rewards: dbMilestoneRewards || milestoneRewards,
-          referral_rewards: dbReferralRewards || referralRewards,
-          total_earnings: dbTotalEarnings || calculatedTotalEarnings,
-          pending_rewards: dbPendingRewards || pendingRewards,
-          claimed_rewards: 0,
-          unlocked_rewards: 0,
+          // CRITICAL FIX: Ensure we're using the correct values from the database
+          // If database values are 0 but we have calculated values, use the calculated ones
+          milestone_rewards: dbMilestoneRewards > 0 ? dbMilestoneRewards : milestoneRewards,
+          referral_rewards: dbReferralRewards > 0 ? dbReferralRewards : referralRewards,
+          total_earnings: dbTotalEarnings > 0 ? dbTotalEarnings : calculatedTotalEarnings,
+          pending_rewards: dbPendingRewards > 0 ? dbPendingRewards : pendingRewards,
+          claimed_rewards: statsData.claimed_rewards || 0,
+          unlocked_rewards: statsData.unlocked_rewards || 0,
           next_tier: nextTierData.tier
         })
       }
@@ -445,6 +476,7 @@ Join me with my referral link: ${referralLink}
       <TotalEarningsCard
         totalEarnings={stats.total_earnings || 0}
         pendingRewards={stats.pending_rewards || 0}
+        unlockedPercentage={stats.unlocked_percentage || 0}
         milestoneRewards={stats.milestone_rewards || 0}
         referralRewards={stats.referral_rewards || 0}
       />

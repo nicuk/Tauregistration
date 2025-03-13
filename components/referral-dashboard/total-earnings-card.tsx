@@ -19,6 +19,15 @@ export function TotalEarningsCard({
   milestoneRewards = 0,
   referralRewards = 0
 }: TotalEarningsProps) {
+  // Debug the props received by this component
+  console.log("TotalEarningsCard props:", {
+    totalEarnings,
+    pendingRewards,
+    unlockedPercentage,
+    milestoneRewards,
+    referralRewards
+  });
+
   return (
     <Card className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white">
       <CardHeader>
