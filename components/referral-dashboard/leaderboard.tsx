@@ -34,15 +34,25 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
   useEffect(() => {
     // Always fetch global leaderboard data regardless of the prop
     fetchGlobalLeaderboardData()
+    
+    // Set up interval to refresh data every 60 seconds
+    const interval = setInterval(() => {
+      fetchGlobalLeaderboardData()
+    }, 60000)
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval)
   }, [])
   
   const fetchGlobalLeaderboardData = async () => {
     try {
+      console.log("Fetching global leaderboard data...")
       // Get top referrers with usernames - this ensures all users see the same data
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
         .select("user_id, verified_referrals, total_earnings, referral_rewards")
-        .order("referral_rewards", { ascending: false }) // Sort by referral rewards (earnings from referrals)
+        .order("total_earnings", { ascending: false }) // Sort by total TAU earned first
+        .order("verified_referrals", { ascending: false }) // Then by verified referrals as secondary criteria
         .limit(10)
 
       if (topReferrersError) {
@@ -56,23 +66,11 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
       if (topReferrers && topReferrers.length > 0) {
         const userIds = topReferrers.map((referrer) => referrer.user_id)
         
-        // Use a more efficient approach - fetch only the profiles we need using OR conditions
-        let query = supabase
+        // Use a more efficient approach - fetch all profiles for the top referrers
+        const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
-          .select("id, username");
-          
-        // Add OR conditions for each user ID (up to 10 max)
-        if (userIds.length > 0) {
-          // First user ID
-          query = query.eq('id', userIds[0]);
-          
-          // Add OR conditions for remaining user IDs
-          for (let i = 1; i < userIds.length; i++) {
-            query = query.or(`id.eq.${userIds[i]}`);
-          }
-        }
-        
-        const { data: profiles, error: profilesError } = await query;
+          .select("id, username")
+          .in('id', userIds);
 
         if (profilesError) {
           console.error("Error fetching profiles for top referrers:", profilesError)
@@ -89,7 +87,7 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
               username: profile?.username || "Anonymous",
               referrals: referrer.verified_referrals,
               referralRewards: referrer.referral_rewards || 0,
-              earnings: referrer.total_earnings || 0
+              earnings: parseFloat(referrer.total_earnings) || 0
             }
           })
           
@@ -134,7 +132,7 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="tabular-nums text-primary">
-                    {(referrer.referralRewards || 0).toLocaleString()} TAU
+                    {(referrer.earnings || 0).toLocaleString()} TAU
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {referrer.referrals || 0} verified referrals
