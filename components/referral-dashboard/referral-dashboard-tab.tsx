@@ -180,6 +180,9 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         return
       }
 
+      // Debug output to see what's coming from the database
+      console.log("Stats data from database:", statsData);
+
       // Get top referrers
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
@@ -226,15 +229,40 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         // Calculate referrals needed for next tier
         const referralsNeeded = Math.max(0, nextTierRequired - verifiedReferrals)
         
-        // Calculate milestone and referral rewards
+        // Calculate milestone and referral rewards as fallbacks
         const milestoneRewards = calculateMilestoneRewards(verifiedReferrals)
         const referralRewards = calculateReferralRewards(referredUsers)
         
-        // Calculate total earnings: referral rewards + milestone rewards
-        const totalEarnings = statsData.referral_rewards + statsData.milestone_rewards
+        // Parse database values, ensuring they're numbers
+        const dbMilestoneRewards = typeof statsData.milestone_rewards === 'number' 
+          ? statsData.milestone_rewards 
+          : statsData.milestone_rewards 
+            ? parseFloat(statsData.milestone_rewards) 
+            : 0
+            
+        const dbReferralRewards = typeof statsData.referral_rewards === 'number' 
+          ? statsData.referral_rewards 
+          : statsData.referral_rewards 
+            ? parseFloat(statsData.referral_rewards) 
+            : 0
+            
+        const dbTotalEarnings = typeof statsData.total_earnings === 'number' 
+          ? statsData.total_earnings 
+          : statsData.total_earnings 
+            ? parseFloat(statsData.total_earnings) 
+            : 0
+            
+        const dbPendingRewards = typeof statsData.pending_rewards === 'number' 
+          ? statsData.pending_rewards 
+          : statsData.pending_rewards 
+            ? parseFloat(statsData.pending_rewards) 
+            : 0
+        
+        // Calculate total earnings as fallback: referral rewards + milestone rewards
+        const calculatedTotalEarnings = dbReferralRewards + dbMilestoneRewards
         
         // Calculate pending rewards
-        const pendingRewards = statsData.pending_rewards || calculatePendingRewards(referredUsers)
+        const pendingRewards = calculatePendingRewards(referredUsers)
         
         // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 1
         const unlocked_percentage = verifiedReferrals > 0 ? 100 : 0
@@ -272,6 +300,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           total_referrals: statsData.total_referrals || 0,
           verified_referrals: verifiedReferrals,
           active_referrals: statsData.active_referrals || 0,
+          rank: statsData.rank || 0,
           current_tier: currentTierData.tier,
           current_tier_name: currentTierData.badgeTitle,
           next_tier_name: nextTierData.badgeTitle,
@@ -283,10 +312,13 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           referrals_needed: referralsNeeded,
           total_users: statsData.total_users || 0,
           referral_details: statsData.referral_details || "",
-          milestone_rewards: statsData.milestone_rewards || milestoneRewards,
-          referral_rewards: statsData.referral_rewards || referralRewards,
-          total_earnings: statsData.total_earnings || (statsData.referral_rewards + statsData.milestone_rewards),
-          pending_rewards: statsData.pending_rewards || pendingRewards
+          milestone_rewards: dbMilestoneRewards || milestoneRewards,
+          referral_rewards: dbReferralRewards || referralRewards,
+          total_earnings: dbTotalEarnings || calculatedTotalEarnings,
+          pending_rewards: dbPendingRewards || pendingRewards,
+          claimed_rewards: 0,
+          unlocked_rewards: 0,
+          next_tier: nextTierData.tier
         })
       }
     } catch (error) {
