@@ -207,8 +207,9 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       // Get top referrers
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
-        .select("user_id, referral_rewards, verified_referrals")  // Remove the profiles join
-        .order("referral_rewards", { ascending: false })
+        .select("user_id, referral_rewards, verified_referrals, total_earnings")  // Add total_earnings
+        .order("total_earnings", { ascending: false }) // Sort by total earnings first
+        .order("verified_referrals", { ascending: false }) // Then by verified referrals
         .limit(10)
 
       if (topReferrersError) {
@@ -237,6 +238,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           return {
             ...referrer,
             username: profile?.username || "Anonymous",
+            earnings: parseFloat(referrer.total_earnings) || 0
           };
         });
         
