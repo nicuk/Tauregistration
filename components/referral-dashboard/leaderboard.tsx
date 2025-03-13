@@ -133,8 +133,12 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
                   <span className="font-medium">{referrer.username}</span>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="tabular-nums text-primary">{referrer.referralRewards.toLocaleString()} TAU</span>
-                  <span className="text-sm text-muted-foreground">{referrer.referrals} verified referrals</span>
+                  <span className="tabular-nums text-primary">
+                    {(referrer.referralRewards || 0).toLocaleString()} TAU
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {referrer.referrals || 0} verified referrals
+                  </span>
                 </div>
               </motion.div>
             ))

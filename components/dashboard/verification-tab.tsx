@@ -21,7 +21,7 @@ const TAU_TELEGRAM_URL = "https://t.me/TAUMine"
 const TWITTER_SHARE_TEMPLATE = (referralCode: string, referralLink: string) =>
   `I just joined TAUMine as an early Pioneer! This AI-powered mining platform offers 3x rewards in the first week.
 
-💎 Become a Genesis Pioneer and earn up to 34,000 TAU
+💎 Become a Genesis Pioneer and earn up to 17,000 TAU
 
 Join me with my referral link: ${referralLink}
 
@@ -203,22 +203,22 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
   const REWARD_BREAKDOWN = [
     {
       action: "Twitter Follow & Verification",
-      amount: 10000,
+      amount: 5000,
       percentage: 29.4,
     },
     {
       action: "Telegram Join & Verification",
-      amount: 8000,
+      amount: 4000,
       percentage: 23.5,
     },
     {
       action: "Twitter Post with #TAUMine",
-      amount: 6000,
+      amount: 3000,
       percentage: 17.6,
     },
     {
       action: "First Referral (who verifies email)",
-      amount: 10000,
+      amount: 5000,
       percentage: 29.5,
     },
   ]
@@ -246,7 +246,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         className="mt-4 text-center bg-green-100 rounded-lg p-3"
       >
         <p className="text-sm text-green-600">Reward Claimed</p>
-        <p className="text-lg font-bold text-green-700">10,000 TAU</p>
+        <p className="text-lg font-bold text-green-700">5,000 TAU</p>
       </motion.div>
 
       <p className="text-xs text-green-500 mt-3">
@@ -278,7 +278,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         className="mt-4 text-center bg-green-100 rounded-lg p-3"
       >
         <p className="text-sm text-green-600">Reward Claimed</p>
-        <p className="text-lg font-bold text-green-700">8,000 TAU</p>
+        <p className="text-lg font-bold text-green-700">4,000 TAU</p>
       </motion.div>
 
       <p className="text-xs text-green-500 mt-3">
@@ -294,7 +294,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
 
     return (
       <>
-        <p className="mb-4">Verify your Twitter account to earn 10,000 TAU</p>
+        <p className="mb-4">Verify your Twitter account to earn 5,000 TAU</p>
         <ol className="list-decimal list-inside space-y-2 mb-4">
           <li>
             Follow{" "}
@@ -343,7 +343,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
 
     return (
       <>
-        <p className="mb-4">Verify your Telegram account to earn 8,000 TAU</p>
+        <p className="mb-4">Verify your Telegram account to earn 4,000 TAU</p>
         <ol className="list-decimal list-inside space-y-2 mb-4">
           <li>
             Join the{" "}
@@ -414,12 +414,12 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         </h2>
 
         {/* Email Verification Alert */}
-        {!user.email_confirmed_at && <VerificationAlert email={user.email} />}
+        {!user.email_confirmed_at && <VerificationAlert email={user.email} userId={user.id} />}
 
         {/* Twitter Verification */}
         <Card className="bg-[#eef2ff] border-none">
           <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4">1. Twitter Verification (10,000 TAU)</h3>
+            <h3 className="text-lg font-semibold mb-4">1. Twitter Verification (5,000 TAU)</h3>
             {renderTwitterVerification()}
           </CardContent>
         </Card>
@@ -427,7 +427,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         {/* Telegram Verification */}
         <Card className="bg-[#eef2ff] border-none">
           <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4">2. Telegram Verification (8,000 TAU)</h3>
+            <h3 className="text-lg font-semibold mb-4">2. Telegram Verification (4,000 TAU)</h3>
             {renderTelegramVerification()}
           </CardContent>
         </Card>
@@ -436,7 +436,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         <Card className="bg-[#eef2ff] border-none">
           <CardContent className="p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">3. Share on Twitter (6,000 TAU)</h3>
+              <h3 className="text-lg font-semibold">3. Share on Twitter (3,000 TAU)</h3>
               {profile.twitter_shared && (
                 <span className="text-green-500 font-semibold flex items-center">
                   <CheckCircle className="w-4 h-4 mr-1" />
@@ -444,7 +444,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
                 </span>
               )}
             </div>
-            <p className="mb-4">Share about TAUMine on Twitter to earn 6,000 TAU</p>
+            <p className="mb-4">Share about TAUMine on Twitter to earn 3,000 TAU</p>
             <p className="text-sm text-gray-600 mb-4">
               Your referral link will be automatically included in the tweet.
             </p>
@@ -462,9 +462,9 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         {/* Referral Section */}
         <Card className="bg-[#fff5eb] border-none">
           <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4">4. First Referral Verification (10,000 TAU)</h3>
+            <h3 className="text-lg font-semibold mb-4">4. First Referral Verification (5,000 TAU)</h3>
             <p className="mb-4">
-              Earn 10,000 TAU when your first referral completes their email verification. Your referral code is:{" "}
+              Earn 5,000 TAU when your first referral completes their email verification. Your referral code is:{" "}
               <span className="font-bold">{profile.referral_code}</span>
             </p>
             <div className="flex space-x-2 mb-4">
@@ -481,7 +481,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
               <Alert className="bg-green-50 border-green-200">
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 <AlertDescription className="text-green-700">
-                  First referral completed! You've earned 10,000 TAU
+                  First referral completed! You've earned 5,000 TAU
                 </AlertDescription>
               </Alert>
             ) : profile.completedVerifications > 0 ? (
@@ -500,9 +500,8 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
         type={verificationType}
-        reward={verificationType === "twitter" ? 10000 : 8000}
+        reward={verificationType === "twitter" ? 5000 : 4000}
       />
     </div>
   )
 }
-
