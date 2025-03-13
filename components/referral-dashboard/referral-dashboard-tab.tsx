@@ -37,8 +37,8 @@ interface ReferralStats {
   referrals_needed: number
   total_users: number
   referral_details: string
-  milestone_rewards?: number
-  referral_rewards?: number
+  milestone_rewards: number
+  referral_rewards: number
 }
 
 interface ReferredUser {
@@ -231,10 +231,10 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         const referralRewards = calculateReferralRewards(referredUsers)
         
         // Calculate total earnings: referral rewards + milestone rewards
-        const totalEarnings = referralRewards + milestoneRewards
+        const totalEarnings = statsData.referral_rewards + statsData.milestone_rewards
         
         // Calculate pending rewards
-        const pendingRewards = calculatePendingRewards(referredUsers)
+        const pendingRewards = statsData.pending_rewards || calculatePendingRewards(referredUsers)
         
         // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 1
         const unlocked_percentage = verifiedReferrals > 0 ? 100 : 0
@@ -269,20 +269,24 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         
         // Update stats state
         setStats({
-          ...statsData,
-          top_referrers: topReferrersWithUsernames,
-          referrals_needed: referralsNeeded,
+          total_referrals: statsData.total_referrals || 0,
+          verified_referrals: verifiedReferrals,
+          active_referrals: statsData.active_referrals || 0,
           current_tier: currentTierData.tier,
-          next_tier: nextTierData.tier,
-          current_tier_name: currentTierData.badgeTitle || "Pioneer",
-          next_tier_name: nextTierData.badgeTitle || "Next Tier",
-          current_tier_progress: progressToNextTier,
-          milestone_rewards: milestoneRewards,
-          referral_rewards: referralRewards,
-          total_earnings: totalEarnings,
-          pending_rewards: pendingRewards,
+          current_tier_name: currentTierData.badgeTitle,
+          next_tier_name: nextTierData.badgeTitle,
+          overall_completion_percentage: overall_completion_percentage,
           unlocked_percentage: unlocked_percentage,
-          overall_completion_percentage: overall_completion_percentage
+          top_referrers: topReferrersWithUsernames,
+          progress_to_next_tier: progressToNextTier,
+          next_tier_reward: nextTierData.reward,
+          referrals_needed: referralsNeeded,
+          total_users: statsData.total_users || 0,
+          referral_details: statsData.referral_details || "",
+          milestone_rewards: statsData.milestone_rewards || milestoneRewards,
+          referral_rewards: statsData.referral_rewards || referralRewards,
+          total_earnings: statsData.total_earnings || (statsData.referral_rewards + statsData.milestone_rewards),
+          pending_rewards: statsData.pending_rewards || pendingRewards
         })
       }
     } catch (error) {
