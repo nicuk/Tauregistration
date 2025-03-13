@@ -14,12 +14,21 @@ interface LeaderboardProps {
     username: string
     referrals: number
     earnings?: number
+    referralRewards?: number
   }>
   fetchGlobalLeaderboard?: boolean
+  globalTopReferrers?: Array<{
+    id?: string
+    username: string
+    referrals: number
+    earnings?: number
+    referralRewards?: number
+  }>
+  userId?: string
 }
 
-export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlobalLeaderboard = false }: LeaderboardProps) {
-  const [globalTopReferrers, setGlobalTopReferrers] = useState(topReferrers)
+export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlobalLeaderboard = false, globalTopReferrers, userId }: LeaderboardProps) {
+  const [globalTopReferrersState, setGlobalTopReferrers] = useState(globalTopReferrers || topReferrers)
   const supabase = createClientSupabaseClient()
   
   useEffect(() => {
@@ -100,8 +109,8 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y">
-          {globalTopReferrers.length > 0 ? (
-            globalTopReferrers.map((referrer, index) => (
+          {globalTopReferrersState.length > 0 ? (
+            globalTopReferrersState.map((referrer, index) => (
               <motion.div
                 key={referrer.id || referrer.username}
                 initial={{ opacity: 0, x: -20 }}

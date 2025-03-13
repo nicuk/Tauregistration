@@ -378,6 +378,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           unlocked_percentage: unlocked_percentage,
           top_referrers: topReferrersWithUsernames,
           progress_to_next_tier: progressToNextTier,
+          current_tier_progress: verifiedReferrals >= currentTierData.required ? 100 : 0, // Fix for undefined% issue
           next_tier_reward: nextTierData.reward,
           referrals_needed: referralsNeeded,
           total_users: statsData.total_users || 0,
@@ -660,42 +661,12 @@ Join me with my referral link: ${referralLink}
         </CardContent>
       </Card>
 
-      {/* Verification Progress */}
-      <Card className={cardBgStyle}>
-        <CardHeader>
-          <CardTitle>Verification Progress</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <div className="flex justify-between mb-2">
-              <span>Overall Progress</span>
-              <span>{stats.overall_completion_percentage ? 
-                stats.overall_completion_percentage.toFixed(1) : 
-                "0.0"}%</span>
-            </div>
-            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ 
-                  width: `${stats.overall_completion_percentage || 0}%` 
-                }}
-                className="h-full bg-primary rounded-full"
-              />
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              {referredUsers.length} referrals have completed an average of {stats.overall_completion_percentage ? 
-                stats.overall_completion_percentage.toFixed(1) : 
-                "0.0"}% of all verification steps
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Referral Leaderboard */}
+      {/* Top Referrers */}
       <Card className={cardBgStyle}>
         <CardContent className="p-0">
           <Leaderboard 
-            fetchGlobalLeaderboard={true} // Ensure all users see the same global leaderboard
+            globalTopReferrers={stats.top_referrers || []}
+            userId={user?.id || ""}
           />
         </CardContent>
       </Card>

@@ -31,7 +31,6 @@ export function TotalEarningsCard({
   // Ensure all values are numbers to prevent rendering errors
   const safeTotal = typeof totalEarnings === 'number' ? totalEarnings : 0;
   const safePending = typeof pendingRewards === 'number' ? pendingRewards : 0;
-  const safeUnlocked = typeof unlockedPercentage === 'number' ? unlockedPercentage : 0;
   const safeMilestone = typeof milestoneRewards === 'number' ? milestoneRewards : 0;
   const safeReferral = typeof referralRewards === 'number' ? referralRewards : 0;
 
@@ -65,7 +64,7 @@ export function TotalEarningsCard({
             </div>
           </div>
 
-          {/* Unlocked and Pending */}
+          {/* Total and Pending */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/10 rounded-lg p-3">
               <div className="flex items-center space-x-1 mb-1">
@@ -83,21 +82,8 @@ export function TotalEarningsCard({
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div>
-            <div className="flex justify-between mb-1">
-              <p className="text-sm opacity-70">Unlocked Percentage</p>
-              <p className="text-sm font-medium">{safeUnlocked.toFixed(1)}%</p>
-            </div>
-            <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${safeUnlocked}%` }}
-                className="h-full bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"
-              />
-            </div>
-            <p className="text-xs mt-1 opacity-60">Each verification step is worth 1,000 TAU</p>
-          </div>
+          {/* Information text */}
+          <p className="text-xs mt-1 opacity-60">Each verification step is worth 1,000 TAU</p>
         </motion.div>
       </CardContent>
     </Card>
