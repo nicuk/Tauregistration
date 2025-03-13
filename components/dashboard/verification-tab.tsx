@@ -26,7 +26,7 @@ const TWITTER_SHARE_TEMPLATE = (referralCode: string, referralLink: string) =>
 
 Join me with my referral link: ${referralLink}
 
-#TAUMine #AITechnology #Web3 #TAUvsPI #EarlyPioneer`
+#TAUMine #AIMining #Web3 #TAUvsPI #EarlyPioneer`
 
 interface VerificationTabProps {
   user: any
@@ -109,6 +109,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         const devModeUser = JSON.parse(localStorage.getItem("devModeUser") || "{}")
         devModeUser.user_metadata[`${type}_verified`] = true
         devModeUser.user_metadata[`${type}_handle`] = username
+        devModeUser.user_metadata[`${type}_verified_at`] = new Date().toISOString()
         localStorage.setItem("devModeUser", JSON.stringify(devModeUser))
 
         // Refresh the page to reflect changes
@@ -127,6 +128,7 @@ export function VerificationTab({ user, profile, pioneerNumber }: VerificationTa
         .update({
           [`${type}_verified`]: true,
           [`${type}_handle`]: username,
+          [`${type}_verified_at`]: new Date().toISOString(),
         })
         .eq("id", userId)
 
