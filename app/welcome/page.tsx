@@ -181,7 +181,7 @@ export default function WelcomePage() {
                 id: user.id,
                 username: user.user_metadata?.username || user.email?.split('@')[0],
                 email: user.email,
-                referral_code: referralCodeToUse,
+                referred_by: pendingReferralCode, // Store the referral code in referred_by field
                 created_at: new Date(),
                 updated_at: new Date()
               }, { onConflict: 'id' })
