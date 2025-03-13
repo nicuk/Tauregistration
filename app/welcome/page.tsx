@@ -80,20 +80,43 @@ export default function WelcomePage() {
           const checkReferral = urlParams.get('checkReferral')
           const pendingReferralCode = typeof window !== 'undefined' ? localStorage.getItem('pendingReferralCode') : null
           
+          // If we have a pending referral code, validate it first
+          let validatedReferralCode = null
+          if (checkReferral === 'true' && pendingReferralCode) {
+            try {
+              // Check if the referral code exists as a username in profiles
+              const { data: referrerData, error: referrerError } = await supabase
+                .from("profiles")
+                .select("id, username")
+                .eq("username", pendingReferralCode)
+                .single()
+              
+              if (!referrerError && referrerData) {
+                // Valid referrer found
+                validatedReferralCode = pendingReferralCode
+                console.log("Valid referral code found:", validatedReferralCode)
+              } else {
+                console.log("Invalid referral code or referrer not found:", pendingReferralCode)
+              }
+            } catch (err) {
+              console.error("Error validating referral code:", err)
+            }
+          }
+          
           // If profile exists in database, use it; otherwise fallback to metadata
           if (profileData) {
             setProfile(profileData)
             setPioneerNumber(profileData.pioneer_number)
             
-            // If we have a pending referral code and we were redirected from OAuth
-            if (checkReferral === 'true' && pendingReferralCode && !profileData.referral_code) {
-              console.log("Processing pending referral code:", pendingReferralCode)
+            // If we have a validated referral code and we were redirected from OAuth
+            if (validatedReferralCode && !profileData.referral_code) {
+              console.log("Processing validated referral code:", validatedReferralCode)
               
               // Update the profile with the referral code
               const { error: updateError } = await supabase
                 .from("profiles")
                 .update({ 
-                  referral_code: pendingReferralCode,
+                  referral_code: validatedReferralCode,
                   updated_at: new Date().toISOString()
                 })
                 .eq("id", user.id)
@@ -116,6 +139,9 @@ export default function WelcomePage() {
                   setProfile(updatedProfile)
                 }
               }
+            } else if (pendingReferralCode) {
+              // Clear invalid referral code
+              localStorage.removeItem('pendingReferralCode')
             }
           } else {
             console.log("No profile found in database, using metadata")
@@ -123,8 +149,8 @@ export default function WelcomePage() {
             
             // Try to create a profile if it doesn't exist
             try {
-              // Check for pending referral code from Google OAuth flow
-              const referralCodeToUse = checkReferral === 'true' && pendingReferralCode ? pendingReferralCode : null
+              // Use the validated referral code for new profile creation
+              const referralCodeToUse = validatedReferralCode
               
               const { error: insertError } = await supabase.from("profiles").upsert({
                 id: user.id,
@@ -139,7 +165,7 @@ export default function WelcomePage() {
                 console.error("Error creating profile:", insertError)
               } else {
                 // Clear the pending referral code if used
-                if (referralCodeToUse) {
+                if (pendingReferralCode) {
                   localStorage.removeItem('pendingReferralCode')
                 }
                 
