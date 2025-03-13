@@ -80,9 +80,17 @@ export default function WelcomePage() {
           const checkReferral = urlParams.get('checkReferral')
           const pendingReferralCode = typeof window !== 'undefined' ? localStorage.getItem('pendingReferralCode') : null
           
+          console.log("DEBUG - OAuth flow check:", { 
+            checkReferral, 
+            pendingReferralCode,
+            hasLocalStorage: typeof window !== 'undefined',
+            url: typeof window !== 'undefined' ? window.location.href : 'server-side'
+          })
+          
           // If we have a pending referral code, validate it first
           let validatedReferralCode = null
           if (checkReferral === 'true' && pendingReferralCode) {
+            console.log("DEBUG - Validating referral code:", pendingReferralCode)
             try {
               // Check if the referral code exists as a username in profiles
               const { data: referrerData, error: referrerError } = await supabase
@@ -91,15 +99,21 @@ export default function WelcomePage() {
                 .eq("username", pendingReferralCode)
                 .single()
               
+              console.log("DEBUG - Referrer query result:", { 
+                data: referrerData, 
+                error: referrerError,
+                query: `username = ${pendingReferralCode}`
+              })
+              
               if (!referrerError && referrerData) {
                 // Valid referrer found
                 validatedReferralCode = pendingReferralCode
-                console.log("Valid referral code found:", validatedReferralCode)
+                console.log("DEBUG - Valid referral code found:", validatedReferralCode)
               } else {
-                console.log("Invalid referral code or referrer not found:", pendingReferralCode)
+                console.log("DEBUG - Invalid referral code or referrer not found:", pendingReferralCode)
               }
             } catch (err) {
-              console.error("Error validating referral code:", err)
+              console.error("DEBUG - Error validating referral code:", err)
             }
           }
           
@@ -110,7 +124,7 @@ export default function WelcomePage() {
             
             // If we have a validated referral code and we were redirected from OAuth
             if (validatedReferralCode && !profileData.referral_code) {
-              console.log("Processing validated referral code:", validatedReferralCode)
+              console.log("DEBUG - Processing validated referral code:", validatedReferralCode)
               
               // Update the profile with the referral code
               const { error: updateError } = await supabase
@@ -120,6 +134,8 @@ export default function WelcomePage() {
                   updated_at: new Date().toISOString()
                 })
                 .eq("id", user.id)
+              
+              console.log("DEBUG - Profile update result:", { updateError })
               
               if (updateError) {
                 console.error("Error updating profile with referral code:", updateError)
@@ -152,6 +168,15 @@ export default function WelcomePage() {
               // Use the validated referral code for new profile creation
               const referralCodeToUse = validatedReferralCode
               
+              console.log("DEBUG - Creating new profile with:", {
+                userId: user.id,
+                username: user.user_metadata?.username || user.email?.split('@')[0],
+                email: user.email,
+                referralCode: referralCodeToUse,
+                pendingReferralCode,
+                validatedReferralCode
+              })
+              
               const { error: insertError } = await supabase.from("profiles").upsert({
                 id: user.id,
                 username: user.user_metadata?.username || user.email?.split('@')[0],
@@ -160,6 +185,8 @@ export default function WelcomePage() {
                 created_at: new Date(),
                 updated_at: new Date()
               }, { onConflict: 'id' })
+              
+              console.log("DEBUG - Profile creation result:", { insertError })
               
               if (insertError) {
                 console.error("Error creating profile:", insertError)
