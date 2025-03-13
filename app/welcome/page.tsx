@@ -75,20 +75,62 @@ export default function WelcomePage() {
             console.error("Error fetching profile:", profileError)
           }
           
+          // Check for pending referral code from Google OAuth flow
+          const urlParams = new URLSearchParams(window.location.search)
+          const checkReferral = urlParams.get('checkReferral')
+          const pendingReferralCode = typeof window !== 'undefined' ? localStorage.getItem('pendingReferralCode') : null
+          
           // If profile exists in database, use it; otherwise fallback to metadata
           if (profileData) {
             setProfile(profileData)
             setPioneerNumber(profileData.pioneer_number)
+            
+            // If we have a pending referral code and we were redirected from OAuth
+            if (checkReferral === 'true' && pendingReferralCode && !profileData.referral_code) {
+              console.log("Processing pending referral code:", pendingReferralCode)
+              
+              // Update the profile with the referral code
+              const { error: updateError } = await supabase
+                .from("profiles")
+                .update({ 
+                  referral_code: pendingReferralCode,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("id", user.id)
+              
+              if (updateError) {
+                console.error("Error updating profile with referral code:", updateError)
+              } else {
+                console.log("Successfully applied referral code from Google OAuth flow")
+                // Clear the pending referral code
+                localStorage.removeItem('pendingReferralCode')
+                
+                // Refresh the profile to get the updated data
+                const { data: updatedProfile } = await supabase
+                  .from("profiles")
+                  .select("*")
+                  .eq("id", user.id)
+                  .single()
+                  
+                if (updatedProfile) {
+                  setProfile(updatedProfile)
+                }
+              }
+            }
           } else {
             console.log("No profile found in database, using metadata")
             setProfile(user.user_metadata || {})
             
             // Try to create a profile if it doesn't exist
             try {
+              // Check for pending referral code from Google OAuth flow
+              const referralCodeToUse = checkReferral === 'true' && pendingReferralCode ? pendingReferralCode : null
+              
               const { error: insertError } = await supabase.from("profiles").upsert({
                 id: user.id,
                 username: user.user_metadata?.username || user.email?.split('@')[0],
                 email: user.email,
+                referral_code: referralCodeToUse,
                 created_at: new Date(),
                 updated_at: new Date()
               }, { onConflict: 'id' })
@@ -96,6 +138,11 @@ export default function WelcomePage() {
               if (insertError) {
                 console.error("Error creating profile:", insertError)
               } else {
+                // Clear the pending referral code if used
+                if (referralCodeToUse) {
+                  localStorage.removeItem('pendingReferralCode')
+                }
+                
                 // Fetch the profile again after creating it
                 const { data: newProfile } = await supabase
                   .from("profiles")

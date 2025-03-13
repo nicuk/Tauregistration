@@ -149,6 +149,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
     try {
       const currentUrl = window.location.origin
       const redirectUrl = `${currentUrl}/auth/callback`
+      
+      // Store the referral code in localStorage so it can be used after OAuth redirect
+      if (referralCode) {
+        localStorage.setItem('pendingReferralCode', referralCode)
+      }
 
       const { data, error } = await supabaseClient.auth.signInWithOAuth({
         provider: "google",

@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
       }
 
       // Successful authentication
-      return NextResponse.redirect(new URL("/welcome", request.url))
+      // Note: We can't access localStorage here (server-side)
+      // The referral code will be processed in the client-side welcome page
+      return NextResponse.redirect(new URL("/welcome?checkReferral=true", request.url))
     } catch (error) {
       console.error("Unexpected error:", error)
       return NextResponse.redirect(new URL("/auth-error", request.url))
@@ -31,4 +33,3 @@ export async function GET(request: NextRequest) {
   // If no code is present, redirect to home
   return NextResponse.redirect(new URL("/", request.url))
 }
-

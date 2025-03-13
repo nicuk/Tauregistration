@@ -140,6 +140,15 @@ export default function LoginPage() {
     try {
       const currentUrl = window.location.origin
       const redirectUrl = `${currentUrl}/auth/callback`
+      
+      // Check for referral code in URL
+      const urlParams = new URLSearchParams(window.location.search)
+      const refCode = urlParams.get('ref')
+      
+      // Store referral code in localStorage so it can be used after OAuth redirect
+      if (refCode) {
+        localStorage.setItem('pendingReferralCode', refCode)
+      }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
