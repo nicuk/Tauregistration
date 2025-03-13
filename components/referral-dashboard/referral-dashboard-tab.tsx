@@ -119,6 +119,9 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
+    console.log("Component mounted with user:", user);
+    console.log("Profile data:", profile);
+    
     if (user?.id) {
       console.log("User ID is available, fetching data:", user.id);
       fetchReferralStats();
@@ -181,9 +184,10 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       }
       
       // Get referral stats for this user
+      console.log(`Executing query: SELECT * FROM referral_stats WHERE user_id = '${user?.id}'`);
       const { data: statsData, error: statsError } = await supabase
         .from("referral_stats")
-        .select("*, profiles(username)")
+        .select("*")  // Remove the profiles join that's causing the error
         .eq("user_id", user?.id)
         .single()
 
@@ -203,7 +207,7 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       // Get top referrers
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
-        .select("user_id, referral_rewards, verified_referrals, profiles(username)")
+        .select("user_id, referral_rewards, verified_referrals")  // Remove the profiles join
         .order("referral_rewards", { ascending: false })
         .limit(10)
 
@@ -211,11 +215,33 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         console.error("Error fetching top referrers:", topReferrersError)
       }
 
-      // Map top referrers to include username
-      const topReferrersWithUsernames = (topReferrers || []).map((referrer: any) => ({
-        ...referrer,
-        username: referrer.profiles?.username || "Anonymous",
-      }))
+      // We need to get usernames separately since the join is causing errors
+      let topReferrersWithUsernames = [];
+      if (topReferrers && topReferrers.length > 0) {
+        // Get the user IDs from top referrers
+        const userIds = topReferrers.map((referrer: any) => referrer.user_id);
+        
+        // Fetch usernames from profiles table
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, username")
+          .in("id", userIds);
+          
+        if (profilesError) {
+          console.error("Error fetching profiles:", profilesError);
+        }
+        
+        // Map usernames to top referrers
+        topReferrersWithUsernames = topReferrers.map((referrer: any) => {
+          const profile = profilesData?.find((p: any) => p.id === referrer.user_id);
+          return {
+            ...referrer,
+            username: profile?.username || "Anonymous",
+          };
+        });
+        
+        console.log("Processed referrers:", topReferrersWithUsernames);
+      }
 
       if (statsData) {
         // CRITICAL: Handle the case where statsData exists but might be empty or have null values
@@ -341,12 +367,11 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           referrals_needed: referralsNeeded,
           total_users: statsData.total_users || 0,
           referral_details: statsData.referral_details || "",
-          // CRITICAL FIX: Ensure we're using the correct values from the database
-          // If database values are 0 but we have calculated values, use the calculated ones
-          milestone_rewards: dbMilestoneRewards > 0 ? dbMilestoneRewards : milestoneRewards,
-          referral_rewards: dbReferralRewards > 0 ? dbReferralRewards : referralRewards,
-          total_earnings: dbTotalEarnings > 0 ? dbTotalEarnings : calculatedTotalEarnings,
-          pending_rewards: dbPendingRewards > 0 ? dbPendingRewards : pendingRewards,
+          // Use database values first, but fall back to calculated values if database values are missing or zero
+          milestone_rewards: dbMilestoneRewards || milestoneRewards,
+          referral_rewards: dbReferralRewards || referralRewards,
+          total_earnings: dbTotalEarnings || (dbMilestoneRewards + dbReferralRewards) || calculatedTotalEarnings,
+          pending_rewards: dbPendingRewards || pendingRewards,
           claimed_rewards: statsData.claimed_rewards || 0,
           unlocked_rewards: statsData.unlocked_rewards || 0,
           next_tier: nextTierData.tier
@@ -462,6 +487,11 @@ Join me with my referral link: ${referralLink}
   useEffect(() => {
     fetchReferralStats()
   }, [])
+
+  // Debug state changes
+  useEffect(() => {
+    console.log("Stats state updated:", stats);
+  }, [stats]);
 
   // Calculate current and next tier data based on stats
   const currentTierData = TIERS.find(tier => tier.tier === stats.current_tier) || TIERS[0]
