@@ -170,84 +170,56 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
       // Get referral stats for this user
       const { data: statsData, error: statsError } = await supabase
         .from("referral_stats")
-        .select("*")
-        .eq("user_id", user.id)
+        .select("*, profiles(username)")
+        .eq("user_id", user?.id)
         .single()
 
       if (statsError) {
         console.error("Error fetching referral stats:", statsError)
-        
-        // If no stats found, trigger sync to create them
-        if (statsError.code === "PGRST116") {
-          await syncReferralStats()
-          return
-        }
+        setErrorMessage("Failed to load referral stats. Please try again later.")
+        return
       }
 
+      // Get top referrers
+      const { data: topReferrers, error: topReferrersError } = await supabase
+        .from("referral_stats")
+        .select("user_id, referral_rewards, verified_referrals, profiles(username)")
+        .order("referral_rewards", { ascending: false })
+        .limit(10)
+
+      if (topReferrersError) {
+        console.error("Error fetching top referrers:", topReferrersError)
+      }
+
+      // Map top referrers to include username
+      const topReferrersWithUsernames = (topReferrers || []).map((referrer: any) => ({
+        ...referrer,
+        username: referrer.profiles?.username || "Anonymous",
+      }))
+
       if (statsData) {
-        // Get top referrers with usernames
-        const { data: topReferrers, error: topReferrersError } = await supabase
-          .from("referral_stats")
-          .select("user_id, total_referrals, total_earnings, unlocked_rewards")
-          .order("verified_referrals", { ascending: false })  // Use verified_referrals for ranking
-          .limit(10)
-
-        if (topReferrersError) {
-          console.error("Error fetching top referrers:", topReferrersError)
-        }
-
-        // Get usernames for top referrers
-        let topReferrersWithUsernames = []
-        if (topReferrers && topReferrers.length > 0) {
-          const userIds = topReferrers.map((referrer: TopReferrer) => referrer.user_id)
-          const { data: profiles, error: profilesError } = await supabase
-            .from("profiles")
-            .select("id, username")
-            .in("id", userIds)
-
-          if (profilesError) {
-            console.error("Error fetching profiles for top referrers:", profilesError)
-          }
-
-          if (profiles) {
-            topReferrersWithUsernames = topReferrers.map((referrer: TopReferrer) => {
-              const profile = profiles.find((p: { id: string, username: string }) => p.id === referrer.user_id)
-              return {
-                id: referrer.user_id,
-                username: profile?.username || "Anonymous",
-                referrals: referrer.total_referrals,
-                earnings: referrer.total_earnings || referrer.unlocked_rewards || 0
-              }
-            })
-          }
-        }
-
-        // Determine current tier and next tier
-        const tiers = TIERS
+        // Calculate verified referrals
         const verifiedReferrals = statsData.verified_referrals || 0
         
-        // Find the highest tier the user has achieved
-        let currentTierIndex = -1;
-        for (let i = 0; i < tiers.length; i++) {
-          if (verifiedReferrals >= tiers[i].required) {
-            currentTierIndex = i;
-          } else {
-            break;
-          }
-        }
+        // Find current tier based on verified referrals
+        const currentTierIndex = TIERS.findIndex((tier) => verifiedReferrals < tier.required)
+        const currentTierData = currentTierIndex > 0 
+          ? TIERS[currentTierIndex - 1] 
+          : verifiedReferrals >= TIERS[TIERS.length - 1].required 
+            ? TIERS[TIERS.length - 1] 
+            : { tier: 0, required: 0, reward: 0, badgeTitle: "Pioneer" }
         
-        // Next tier is the one immediately after the current tier
-        const nextTierIndex = Math.min(currentTierIndex + 1, tiers.length - 1);
+        // Find next tier
+        const nextTierData = currentTierIndex >= 0 && currentTierIndex < TIERS.length 
+          ? TIERS[currentTierIndex] 
+          : TIERS[TIERS.length - 1]
         
-        const currentTierData = tiers[currentTierIndex >= 0 ? currentTierIndex : 0]
-        const nextTierData = tiers[nextTierIndex]
-        
-        // Calculate progress to next tier
+        // Get required referrals for current and next tier
         const currentTierRequired = currentTierData.required
         const nextTierRequired = nextTierData.required
         
-        // If we're at the max tier, progress is 100%
-        const progressToNextTier = currentTierIndex === tiers.length - 1 
+        // Calculate progress to next tier
+        const progressToNextTier = currentTierIndex === TIERS.length - 1 
           ? 100 
           : Math.min(100, Math.floor(((verifiedReferrals - currentTierRequired) / (nextTierRequired - currentTierRequired)) * 100))
         
@@ -265,8 +237,36 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         const pendingRewards = calculatePendingRewards(referredUsers)
         
         // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 1
-        const unlocked_percentage = verifiedReferrals >= 1 ? 100 : (verifiedReferrals * 100)
-
+        const unlocked_percentage = verifiedReferrals > 0 ? 100 : 0
+        
+        // Calculate overall completion percentage across all referrals
+        let overall_completion_percentage = 0;
+        if (referredUsers.length > 0) {
+          // If any referral is 100% complete, the overall progress should be 100%
+          const hasFullyVerifiedReferral = referredUsers.some((ref: ReferredUser) => 
+            ref.email_verified && 
+            ref.twitter_verified && 
+            ref.telegram_verified && 
+            ref.twitter_shared && 
+            ref.first_referral
+          );
+          
+          if (hasFullyVerifiedReferral) {
+            overall_completion_percentage = 100;
+          } else {
+            const totalSteps = referredUsers.reduce((total: number, ref: ReferredUser) => {
+              return total + [
+                ref.email_verified,
+                ref.twitter_verified,
+                ref.telegram_verified,
+                ref.twitter_shared,
+                ref.first_referral,
+              ].filter(Boolean).length;
+            }, 0);
+            overall_completion_percentage = (totalSteps / (referredUsers.length * 5)) * 100;
+          }
+        }
+        
         // Update stats state
         setStats({
           ...statsData,
@@ -281,7 +281,8 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
           referral_rewards: referralRewards,
           total_earnings: totalEarnings,
           pending_rewards: pendingRewards,
-          unlocked_percentage: unlocked_percentage
+          unlocked_percentage: unlocked_percentage,
+          overall_completion_percentage: overall_completion_percentage
         })
       }
     } catch (error) {

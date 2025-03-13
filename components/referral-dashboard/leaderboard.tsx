@@ -32,8 +32,8 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
       // Get top referrers with usernames - this ensures all users see the same data
       const { data: topReferrers, error: topReferrersError } = await supabase
         .from("referral_stats")
-        .select("user_id, verified_referrals, total_earnings")
-        .order("verified_referrals", { ascending: false })
+        .select("user_id, verified_referrals, total_earnings, referral_rewards")
+        .order("referral_rewards", { ascending: false }) // Sort by referral rewards (earnings from referrals)
         .limit(10)
 
       if (topReferrersError) {
@@ -65,6 +65,7 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
               id: referrer.user_id,
               username: profile?.username || "Anonymous",
               referrals: referrer.verified_referrals,
+              referralRewards: referrer.referral_rewards || 0,
               earnings: referrer.total_earnings || 0
             }
           })
@@ -109,8 +110,8 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
                   <span className="font-medium">{referrer.username}</span>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="tabular-nums text-primary">{referrer.referrals} referrals</span>
-                  <span className="text-sm text-muted-foreground">{(referrer.earnings || 0).toLocaleString()} TAU</span>
+                  <span className="tabular-nums text-primary">{referrer.referralRewards.toLocaleString()} TAU</span>
+                  <span className="text-sm text-muted-foreground">{referrer.referrals} verified referrals</span>
                 </div>
               </motion.div>
             ))

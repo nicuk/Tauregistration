@@ -27,6 +27,9 @@ export function MilestoneTracker({ milestones, currentReferrals, progress }: Mil
 
   // Calculate progress to next milestone
   const progressToNext =
+    currentMilestone === undefined ? 0 :
+    nextMilestone.required === currentMilestone.required ? 100 :
+    currentReferrals > 0 && currentMilestone.tier === 1 ? 100 :
     ((currentReferrals - (currentMilestone?.required || 0)) /
       (nextMilestone.required - (currentMilestone?.required || 0))) *
     100
@@ -107,4 +110,3 @@ export function MilestoneTracker({ milestones, currentReferrals, progress }: Mil
     </Card>
   )
 }
-

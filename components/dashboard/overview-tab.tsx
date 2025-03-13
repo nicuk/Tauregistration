@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { InfoIcon, Twitter, MessageCircle, AlertCircle, Trophy, Users, Share2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClientSupabaseClient } from "@/utils/supabase-client"
 import { EmailVerificationBox } from "@/components/dashboard/email-verification-box" // Import the missing component
 
@@ -41,7 +41,41 @@ const REWARD_BREAKDOWN = [
 
 export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) {
   const [resending, setResending] = useState(false)
+  const [personalRewards, setPersonalRewards] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
   const supabase = createClientSupabaseClient()
+
+  useEffect(() => {
+    // Fetch personal rewards from the database
+    const fetchPersonalRewards = async () => {
+      setIsLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('referral_stats')
+          .select('personal_rewards')
+          .eq('user_id', user.id)
+          .single()
+        
+        if (error) {
+          console.error('Error fetching personal rewards:', error)
+          // Fall back to local calculation if there's an error
+          setPersonalRewards(calculateRewards())
+        } else if (data) {
+          setPersonalRewards(data.personal_rewards)
+        } else {
+          // If no data found, fall back to local calculation
+          setPersonalRewards(calculateRewards())
+        }
+      } catch (error) {
+        console.error('Error in personal rewards fetch:', error)
+        setPersonalRewards(calculateRewards())
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchPersonalRewards()
+  }, [user.id, profile])
 
   const handleResendEmail = async () => {
     setResending(true)
@@ -92,8 +126,8 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
   }
 
   const progress = calculateProgress()
-  const rewards = calculateRewards()
 
+  // This function is kept as a fallback in case the database fetch fails
   function calculateRewards() {
     let total = 0
     if (profile.twitter_verified) total += 5000
@@ -126,7 +160,19 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
 
       <Card className="bg-[#eef2ff] border-none">
         <CardHeader>
-          <CardTitle>General Progress</CardTitle>
+          <CardTitle className="flex items-center space-x-2">
+            <span>General Progress</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <InfoIcon className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="max-w-xs">Verify Your Email To Secure TAU Token</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <Progress value={progress} className="h-2" />
@@ -149,37 +195,17 @@ export function OverviewTab({ user, profile, pioneerNumber }: OverviewTabProps) 
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="bg-[#eef2ff] border-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Rewards</CardTitle>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-muted-foreground hover:text-primary cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="w-80 p-4" side="left">
-                  <p className="font-semibold mb-2">How to earn 17,000 TAU:</p>
-                  <div className="space-y-2">
-                    {REWARD_BREAKDOWN.map((reward, index) => (
-                      <div key={index} className="flex justify-between text-sm">
-                        <span>{reward.action}:</span>
-                        <span className="font-medium">
-                          {reward.amount.toLocaleString()} TAU ({reward.percentage}%)
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium">Your Rewards</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{rewards.toLocaleString()} TAU</div>
+            <div className="text-2xl font-bold">{isLoading ? "Loading..." : personalRewards.toLocaleString()} TAU</div>
             <p className="text-xs text-muted-foreground">out of 17,000 TAU</p>
             <div className="mt-4 space-y-2">
               <div className="flex items-center">
                 <Trophy className="h-4 w-4 text-yellow-500 mr-2" />
                 <div className="text-sm font-medium">Current Rewards</div>
-                <div className="ml-auto font-medium">{rewards.toLocaleString()} TAU</div>
+                <div className="ml-auto font-medium">{isLoading ? "Loading..." : personalRewards.toLocaleString()} TAU</div>
               </div>
               <div className="flex items-center">
                 <Trophy className="h-4 w-4 text-primary mr-2" />
