@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Separator } from "@/components/ui/separator"
 import { ForgotPasswordForm } from "@/components/forgot-password-form"
 import { v4 as uuidv4 } from "uuid"
 
@@ -135,6 +136,35 @@ export default function LoginPage() {
     }
   }
 
+  const handleGoogleSignIn = async () => {
+    try {
+      const currentUrl = window.location.origin
+      const redirectUrl = `${currentUrl}/auth/callback`
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      })
+
+      if (error) {
+        console.error("Google sign in error:", error)
+        throw error
+      }
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error: any) {
+      console.error("Google sign in error:", error)
+      setError(error.message || "Error signing in with Google")
+    }
+  }
+
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -145,43 +175,65 @@ export default function LoginPage() {
           {showForgotPassword ? (
             <ForgotPasswordForm onCancel={() => setShowForgotPassword(false)} />
           ) : (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="your@email.com"
-                />
+            <>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="your@email.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Enter your password"
+                  />
+                </div>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Logging in..." : "Log In"}
+                </Button>
+                <div className="text-center">
+                  <Button variant="link" className="text-sm text-primary" onClick={() => setShowForgotPassword(true)}>
+                    Forgot Password?
+                  </Button>
+                </div>
+              </form>
+
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-background px-2 text-xs text-muted-foreground">Or continue with</span>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Enter your password"
-                />
-              </div>
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Logging in..." : "Log In"}
-              </Button>
-              <div className="text-center">
-                <Button variant="link" className="text-sm text-primary" onClick={() => setShowForgotPassword(true)}>
-                  Forgot Password?
+
+              <div className="grid grid-cols-1 gap-4">
+                <Button variant="outline" type="button" onClick={handleGoogleSignIn} className="w-full">
+                  <img
+                    src="/google-icon.png"
+                    alt="Google"
+                    className="mr-2 h-5 w-5"
+                  />
+                  Google
                 </Button>
               </div>
-            </form>
+            </>
           )}
         </CardContent>
         <CardFooter className="flex justify-center">
