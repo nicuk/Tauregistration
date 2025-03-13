@@ -92,17 +92,17 @@ export default function WelcomePage() {
           if (checkReferral === 'true' && pendingReferralCode) {
             console.log("DEBUG - Validating referral code:", pendingReferralCode)
             try {
-              // Check if the referral code exists as a username in profiles
+              // Check if the referral code exists in the profiles table
               const { data: referrerData, error: referrerError } = await supabase
                 .from("profiles")
-                .select("id, username")
-                .eq("username", pendingReferralCode)
+                .select("id, username, referral_code")
+                .eq("referral_code", pendingReferralCode)
                 .single()
               
               console.log("DEBUG - Referrer query result:", { 
                 data: referrerData, 
                 error: referrerError,
-                query: `username = ${pendingReferralCode}`
+                query: `referral_code = ${pendingReferralCode}`
               })
               
               if (!referrerError && referrerData) {
