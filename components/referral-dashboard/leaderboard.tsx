@@ -46,10 +46,13 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
       // Get usernames for top referrers
       if (topReferrers && topReferrers.length > 0) {
         const userIds = topReferrers.map((referrer) => referrer.user_id)
+        
+        // Fetch ALL profiles to ensure we get usernames for everyone
         const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
           .select("id, username")
-          .in("id", userIds)
+          // Don't filter by user IDs to ensure we get all profiles
+          // This is a temporary fix until the database schema is updated
 
         if (profilesError) {
           console.error("Error fetching profiles for top referrers:", profilesError)
@@ -59,8 +62,12 @@ export function Leaderboard({ rank, totalReferrers, topReferrers = [], fetchGlob
         console.log("Fetched profiles:", profiles)
 
         if (profiles) {
+          // Filter profiles to only include those in our top referrers
+          const relevantProfiles = profiles.filter((p: any) => userIds.includes(p.id));
+          console.log("Relevant profiles for top referrers:", relevantProfiles);
+          
           const processedReferrers = topReferrers.map((referrer) => {
-            const profile = profiles.find((p) => p.id === referrer.user_id)
+            const profile = relevantProfiles.find((p) => p.id === referrer.user_id)
             return {
               id: referrer.user_id,
               username: profile?.username || "Anonymous",

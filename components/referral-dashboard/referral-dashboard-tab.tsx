@@ -318,35 +318,50 @@ export function ReferralDashboardTab({ user, profile }: { user: SupabaseUser; pr
         // Calculate pending rewards
         const pendingRewards = calculatePendingRewards(referredUsers)
         
-        // Calculate unlocked percentage - if user has at least 1 verified referral, they've unlocked 100% of Tier 1
-        const unlocked_percentage = verifiedReferrals > 0 ? 100 : 0
+        // Calculate unlocked percentage based on referral rewards and pending rewards
+        // Unlocked percentage = (referral_rewards / (referral_rewards + pending_rewards)) * 100
+        let unlocked_percentage = 0;
+        const totalPotentialRewards = dbReferralRewards + pendingRewards;
+        
+        if (totalPotentialRewards > 0) {
+          unlocked_percentage = (dbReferralRewards / totalPotentialRewards) * 100;
+          // Round to 1 decimal place
+          unlocked_percentage = Math.round(unlocked_percentage * 10) / 10;
+        } else if (dbReferralRewards > 0) {
+          // If there are no pending rewards but there are referral rewards, then 100% is unlocked
+          unlocked_percentage = 100;
+        }
+        
+        console.log("Unlocked percentage calculation:", {
+          referralRewards: dbReferralRewards,
+          pendingRewards,
+          totalPotential: totalPotentialRewards,
+          percentage: unlocked_percentage
+        });
         
         // Calculate overall completion percentage across all referrals
         let overall_completion_percentage = 0;
         if (referredUsers.length > 0) {
-          // If any referral is 100% complete, the overall progress should be 100%
-          const hasFullyVerifiedReferral = referredUsers.some((ref: ReferredUser) => 
-            ref.email_verified && 
-            ref.twitter_verified && 
-            ref.telegram_verified && 
-            ref.twitter_shared && 
-            ref.first_referral
-          );
+          // Calculate the percentage complete for each referral
+          const referralPercentages = referredUsers.map((ref: ReferredUser) => {
+            const completedSteps = [
+              ref.email_verified,
+              ref.twitter_verified,
+              ref.telegram_verified,
+              ref.twitter_shared,
+              ref.first_referral
+            ].filter(Boolean).length;
+            
+            // Calculate percentage for this referral (0-100%)
+            return (completedSteps / 5) * 100;
+          });
           
-          if (hasFullyVerifiedReferral) {
-            overall_completion_percentage = 100;
-          } else {
-            const totalSteps = referredUsers.reduce((total: number, ref: ReferredUser) => {
-              return total + [
-                ref.email_verified,
-                ref.twitter_verified,
-                ref.telegram_verified,
-                ref.twitter_shared,
-                ref.first_referral,
-              ].filter(Boolean).length;
-            }, 0);
-            overall_completion_percentage = (totalSteps / (referredUsers.length * 5)) * 100;
-          }
+          // Calculate the average of all percentages
+          const totalPercentage = referralPercentages.reduce((sum: number, percentage: number) => sum + percentage, 0);
+          overall_completion_percentage = totalPercentage / referredUsers.length;
+          
+          // Round to 2 decimal places for display
+          overall_completion_percentage = Math.round(overall_completion_percentage * 100) / 100;
         }
         
         // Update stats state
