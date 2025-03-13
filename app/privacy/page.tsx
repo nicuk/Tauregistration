@@ -52,11 +52,6 @@ export default function PrivacyPage() {
             We may change this privacy policy from time to time. If we make changes, we will notify 
             you by revising the date at the top of the policy.
           </p>
-
-          <h2>7. Contact Us</h2>
-          <p>
-            If you have any questions about this privacy policy, please contact us at privacy@taumine.com.
-          </p>
         </CardContent>
       </Card>
     </div>

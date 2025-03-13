@@ -48,11 +48,6 @@ export default function TermsPage() {
             required by applicable law. Your continued use of TAUMine after any changes indicates your
             acceptance of the modified Terms.
           </p>
-
-          <h2>7. Contact Us</h2>
-          <p>
-            If you have any questions about these Terms, please contact us at support@taumine.com.
-          </p>
         </CardContent>
       </Card>
     </div>
