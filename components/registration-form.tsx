@@ -145,40 +145,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
     }
   }
 
-  const handleGoogleSignUp = async () => {
-    try {
-      const currentUrl = window.location.origin
-      const redirectUrl = `${currentUrl}/auth/callback`
-      
-      // Store the referral code in localStorage so it can be used after OAuth redirect
-      if (referralCode) {
-        localStorage.setItem('pendingReferralCode', referralCode)
-      }
-
-      const { data, error } = await supabaseClient.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      })
-
-      if (error) {
-        console.error("Google sign in error:", error)
-        throw error
-      }
-      if (data.url) {
-        window.location.href = data.url
-      }
-    } catch (error: any) {
-      console.error("Google sign in error:", error)
-      setError(error.message || "Error signing in with Google")
-    }
-  }
-
   const formatNumber = (num: number) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
   }
@@ -318,25 +284,15 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
           </Button>
         </form>
 
-        <div className="relative my-6">
+        <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <Separator className="w-full" />
+            <span className="w-full border-t" />
           </div>
-          <div className="relative flex justify-center">
-            <span className="bg-background px-2 text-xs text-muted-foreground">Or continue with</span>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-xs text-muted-foreground">Sign up with email</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
-          <Button variant="outline" type="button" onClick={handleGoogleSignUp} className="w-full">
-            <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/channels4_profile.jpg-YaHk7W4n3eYLCVHdS3culmbJp92fxo.jpeg"
-              alt="Google"
-              className="mr-2 h-5 w-5"
-            />
-            Google
-          </Button>
-        </div>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
         <div className="text-xs text-center text-muted-foreground">

@@ -136,44 +136,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const currentUrl = window.location.origin
-      const redirectUrl = `${currentUrl}/auth/callback`
-      
-      // Check for referral code in URL
-      const urlParams = new URLSearchParams(window.location.search)
-      const refCode = urlParams.get('ref')
-      
-      // Store referral code in localStorage so it can be used after OAuth redirect
-      if (refCode) {
-        localStorage.setItem('pendingReferralCode', refCode)
-      }
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      })
-
-      if (error) {
-        console.error("Google sign in error:", error)
-        throw error
-      }
-      if (data.url) {
-        window.location.href = data.url
-      }
-    } catch (error: any) {
-      console.error("Google sign in error:", error)
-      setError(error.message || "Error signing in with Google")
-    }
-  }
-
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -223,25 +185,16 @@ export default function LoginPage() {
                 </div>
               </form>
 
-              <div className="relative my-6">
+              <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300"></div>
+                  <span className="w-full border-t" />
                 </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-background px-2 text-xs text-muted-foreground">Or continue with</span>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-xs text-muted-foreground">Sign in with email</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                <Button variant="outline" type="button" onClick={handleGoogleSignIn} className="w-full">
-                  <img
-                    src="/google-icon.png"
-                    alt="Google"
-                    className="mr-2 h-5 w-5"
-                  />
-                  Google
-                </Button>
-              </div>
+              {/* Google sign-in button temporarily removed */}
             </>
           )}
         </CardContent>
