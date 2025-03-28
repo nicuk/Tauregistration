@@ -166,12 +166,6 @@ export async function POST(request: Request) {
         )
       }
 
-      // Calculate the pioneer number (1-based index)
-      const pioneerNumber: number = (pioneerCount || 0) + 1
-
-      // Determine if this is a genesis pioneer (first 10,000 users)
-      const isGenesisPioneer: boolean = pioneerNumber <= 10000
-
       // Step 3: Create the user in Auth
       try {
         console.log("Attempting to create auth user with email:", email);
@@ -227,195 +221,27 @@ export async function POST(request: Request) {
 
         const userId = authData.user.id
 
-        // Additional check: Make sure there's no profile with this ID already
-        const { data: existingProfileWithId, error: idCheckError } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .eq("id", userId)
-          .limit(1)
-    
-        if (idCheckError) {
-          console.error("Error checking existing profile by ID:", idCheckError)
-        } else if (existingProfileWithId && existingProfileWithId.length > 0) {
-          // If profile exists with this ID, delete it first
-          try {
-            await supabaseAdmin.from("profiles").delete().eq("id", userId)
-            console.log("Cleaned up existing profile with ID:", userId)
-          } catch (cleanupError) {
-            console.error("Error cleaning up existing profile:", cleanupError)
-            // Continue anyway, the transaction might still succeed
-          }
-        }
-
-        // Step 4: Create the user profile
+        // Step 4: Use our new safe registration function to create the profile
+        // This replaces all the direct SQL operations with a single function call
+        // that handles race conditions and retries
         try {
-          console.log("Creating user profile with pioneer number:", pioneerNumber);
+          console.log("Creating user profile using api_register_user_safe function");
           
-          // Try using our SQL function first
-          console.log("Attempting to use api_register_user function");
-          try {
-            const { data: functionResult, error: functionError } = await supabaseAdmin
-              .rpc('api_register_user', {
-                p_email: email,
-                p_username: finalUsername,
-                p_is_pi_user: isPiUser,
-                p_referral_code: referralCode
-              });
-              
-            if (functionError) {
-              console.log("Error calling api_register_user function:", JSON.stringify(functionError, null, 2));
-              console.log("Function reported error, falling back to direct insert method...");
-            } else if (functionResult && !functionResult.success) {
-              console.log("Profile creation result:", functionResult);
-              console.log("Function reported non-success result, falling back to direct insert method...");
-            } else if (functionResult && functionResult.success) {
-              console.log("Profile created successfully using api_register_user function");
-              // Return success response with the user ID
-              return NextResponse.json({
-                id: functionResult.user_id,
-                username: functionResult.username,
-                referral_code: functionResult.referral_code
-              });
+          const { data: profileData, error: profileError } = await supabaseAdmin.rpc(
+            'api_register_user_safe',
+            {
+              p_username: finalUsername,
+              p_email: email,
+              p_referral_code: referralCode,
+              p_country: country,
+              p_referral_source: referralSource
             }
-          } catch (functionCallError) {
-            console.error("Exception calling api_register_user function:", functionCallError);
-            console.log("Using direct insert as fallback");
-          }
+          );
           
-          // If we get here, the function call failed, so we'll use the direct insert method
-          console.log("Using direct insert as fallback");
-          
-          // Get the next pioneer number if user is a Pi user
-          let nextPioneerNumber = null;
-          let isGenesisPioneer = false;
+          if (profileError) {
+            console.error("Error creating profile with api_register_user_safe:", profileError);
+            console.error("Error details:", JSON.stringify(profileError, null, 2));
             
-          if (isPiUser) {
-            try {
-              // Get the current count of pioneers directly from the profiles table
-              const { count: pioneerCount, error: countError } = await supabaseAdmin
-                .from("profiles")
-                .select("*", { count: "exact", head: true })
-                .eq("is_pi_user", true);
-                  
-              if (countError) {
-                console.error("Error counting pioneers:", countError);
-              } else {
-                const currentCount = (pioneerCount || 0) + 1;
-                nextPioneerNumber = currentCount;
-                isGenesisPioneer = currentCount <= 10000;
-                console.log(`Calculated pioneer number: ${nextPioneerNumber}, isGenesisPioneer: ${isGenesisPioneer}`);
-              }
-            } catch (statsError) {
-              console.error("Error getting pioneer stats:", statsError);
-              // Continue with registration even if stats update fails
-            }
-          }
-            
-          // If there's a referral code, look up the referrer ID first
-          let referrerId = null;
-          if (referralCode) {
-            try {
-              console.log(`Looking up referrer with code: ${referralCode}`);
-              
-              // First try exact match
-              const { data: referrerData, error: referrerError } = await supabaseAdmin
-                .from("profiles")
-                .select("id, total_referrals, referral_code")
-                .eq("referral_code", referralCode)
-                .single();
-                  
-              if (!referrerError && referrerData) {
-                // Store the referral code as TEXT, not the ID
-                referrerId = referralCode; // Use the exact referral code provided
-                console.log(`Found referrer with code ${referralCode}, using this code for referred_by`);
-              } else {
-                console.error("Error looking up referrer ID:", JSON.stringify(referrerError, null, 2));
-                console.log(`Could not find referrer with code ${referralCode}, trying case-insensitive match`);
-                  
-                // Try case-insensitive match as a fallback
-                const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
-                  .from("profiles")
-                  .select("id, referral_code")
-                  .ilike("referral_code", referralCode)
-                  .limit(1);
-                    
-                if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
-                  // Store the exact referral code from the database as TEXT, not the ID
-                  referrerId = caseInsensitiveMatch[0].referral_code;
-                  console.log(`Found case-insensitive match: ${caseInsensitiveMatch[0].referral_code}, using this code for referred_by`);
-                } else {
-                  console.log("No case-insensitive match found either");
-                }
-              }
-            } catch (referrerLookupError) {
-              console.error("Exception during referrer lookup:", referrerLookupError);
-              // Continue with registration even if referrer lookup fails
-            }
-          }
-            
-          // Insert the profile
-          console.log("Inserting profile with data:", {
-            id: userId,
-            username: finalUsername,
-            is_pi_user: isPiUser,
-            pioneer_number: nextPioneerNumber,
-            is_genesis_pioneer: isGenesisPioneer,
-            referral_code: userReferralCode,
-            email: email,
-            country: country,
-            referral_source: referralSource || null,
-            total_referrals: 0,
-            referred_by: referrerId,
-            email_verified: false,
-            twitter_verified: false,
-            telegram_verified: false,
-            twitter_shared: false,
-            first_referral: false
-          });
-          
-          // Wait a brief moment to ensure the auth user is fully created and propagated
-          // This helps prevent foreign key constraint violations, but we keep it short
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Verify the auth user exists before creating the profile
-          const { data: authUserCheck, error: authCheckError } = await supabaseAdmin
-            .auth.admin.getUserById(userId);
-            
-          if (authCheckError || !authUserCheck.user) {
-            console.error("Auth user not found or not fully propagated:", authCheckError);
-            return NextResponse.json(
-              { error: "User creation failed. Please try again." },
-              { status: 500 }
-            );
-          }
-            
-          const { error: insertError } = await supabaseAdmin
-            .from("profiles")
-            .insert({
-              id: userId,
-              username: finalUsername,
-              is_pi_user: isPiUser,
-              pioneer_number: nextPioneerNumber,
-              is_genesis_pioneer: isGenesisPioneer,
-              referral_code: userReferralCode,
-              email: email,
-              country: country,
-              referral_source: referralSource || null,
-              total_referrals: 0,
-              referred_by: referrerId,
-              email_verified: false,
-              twitter_verified: false,
-              telegram_verified: false,
-              twitter_shared: false,
-              first_referral: false
-            });
-              
-          if (insertError) {
-            console.error("Direct insert failed. Error code:", insertError.code);
-            console.error("Error message:", insertError.message);
-            console.error("Error details:", insertError.details);
-            console.error("Full error object:", JSON.stringify(insertError, null, 2));
-              
             // If profile creation fails, delete the auth user to maintain consistency
             try {
               await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -423,288 +249,40 @@ export async function POST(request: Request) {
             } catch (cleanupError) {
               console.error("Error cleaning up auth user:", cleanupError);
             }
-              
+            
             return NextResponse.json(
-              { error: "Database error saving new user" },
+              { error: "Database error updating user" },
               { status: 500 }
             );
-          } else {
-            console.log("Profile created successfully using direct insert");
           }
+          
+          console.log("Profile created successfully using api_register_user_safe");
+          console.log("Profile data:", JSON.stringify(profileData, null, 2));
+          
+          // Return success response
+          return NextResponse.json({
+            success: true,
+            message: "User registered successfully",
+            userId: userId,
+            username: finalUsername,
+            email: email
+          })
         } catch (profileCreationError) {
-          console.error("Error during profile creation attempt:", profileCreationError);
-            
+          console.error("Exception during profile creation:", profileCreationError);
+          
           // If profile creation fails, delete the auth user to maintain consistency
           try {
             await supabaseAdmin.auth.admin.deleteUser(userId);
-            console.log("Cleaned up auth user after profile creation failure");
+            console.log("Cleaned up auth user after profile creation exception");
           } catch (cleanupError) {
             console.error("Error cleaning up auth user:", cleanupError);
           }
-            
+          
           return NextResponse.json(
-            { error: "Database error saving new user" },
+            { error: "Database error updating user" },
             { status: 500 }
           );
         }
-          
-        // Update the referrer's profile with the referred_by field
-        const { error: updateReferredByError } = await supabaseAdmin
-          .from("profiles")
-          .update({ referred_by: referralCode })
-          .eq("id", userId);
-
-        if (updateReferredByError) {
-          console.error("Error updating referred_by field:", updateReferredByError);
-        } else {
-          console.log("Successfully updated referred_by field with referral code");
-        }
-          
-        // Step 5: Handle referral if provided
-        if (referralCode) {
-          try {
-            console.log(`Processing referral for code: ${referralCode}`);
-            
-            // Find the referrer using the referral code
-            const { data: referrerData, error: referrerError } = await supabaseAdmin
-              .from("profiles")
-              .select("id, total_referrals, referral_code")
-              .eq("referral_code", referralCode)
-              .single();
-
-            if (referrerError) {
-              console.error("Error finding referrer:", JSON.stringify(referrerError, null, 2));
-              
-              // Try case-insensitive match as a fallback
-              console.log("Trying case-insensitive match for referral code");
-              try {
-                const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabaseAdmin
-                  .from("profiles")
-                  .select("id, total_referrals, referral_code")
-                  .ilike("referral_code", referralCode)
-                  .limit(1);
-                    
-                if (!caseInsensitiveError && caseInsensitiveMatch && caseInsensitiveMatch.length > 0) {
-                  // Use the exact referral code from the database
-                  const actualReferralCode = caseInsensitiveMatch[0].referral_code;
-                  const referrerId = caseInsensitiveMatch[0].id;
-                  const currentReferrals = caseInsensitiveMatch[0].total_referrals || 0;
-                  
-                  console.log(`Found referrer via case-insensitive match. ID: ${referrerId}, Current referrals: ${currentReferrals}`);
-                  
-                  // Create referral record
-                  const { error: referralRecordError } = await supabaseAdmin
-                    .from("referrals")
-                    .insert({
-                      referrer_id: referrerId,
-                      referred_id: userId,
-                      created_at: new Date().toISOString(),
-                    });
-                  
-                  if (referralRecordError) {
-                    console.error("Error creating referral record:", referralRecordError);
-                  } else {
-                    console.log("Referral record created successfully");
-                    
-                    // Update referrer's total_referrals count
-                    const { error: updateError } = await supabaseAdmin
-                      .from("profiles")
-                      .update({ total_referrals: currentReferrals + 1 })
-                      .eq("id", referrerId);
-                    
-                    if (updateError) {
-                      console.error("Error updating referrer's total_referrals:", updateError);
-                    } else {
-                      console.log(`Updated referrer's total_referrals to ${currentReferrals + 1}`);
-                      
-                      // Update referral_stats table if it exists
-                      try {
-                        // Check if the referral_stats table exists and has the referrer's record
-                        const { data: referrerStats, error: statsCheckError } = await supabaseAdmin
-                          .from("referral_stats")
-                          .select("*")
-                          .eq("user_id", referrerId)
-                          .single();
-                            
-                        if (!statsCheckError && referrerStats) {
-                          // Update the referral stats
-                          const { error: updateStatsError } = await supabaseAdmin
-                            .from("referral_stats")
-                            .update({
-                              referral_count: (referrerStats.referral_count || 0) + 1,
-                              total_referral_count: (referrerStats.total_referral_count || 0) + 1
-                            })
-                            .eq("user_id", referrerId);
-                              
-                          if (updateStatsError) {
-                            console.error("Error updating referral_stats:", updateStatsError);
-                          } else {
-                            console.log("Successfully updated referral_stats");
-                          }
-                        } else {
-                          // Create a new referral stats record if it doesn't exist
-                          const { error: createStatsError } = await supabaseAdmin
-                            .from("referral_stats")
-                            .insert({
-                              user_id: referrerId,
-                              referral_count: 1,
-                              total_referral_count: 1
-                            });
-                              
-                          if (createStatsError) {
-                            console.error("Error creating referral_stats:", createStatsError);
-                          } else {
-                            console.log("Successfully created referral_stats");
-                          }
-                        }
-                      } catch (statsError) {
-                        console.error("Exception handling referral_stats:", statsError);
-                        // Continue despite this error
-                      }
-                    }
-                  }
-                } else {
-                  console.log("No case-insensitive match found for referral code");
-                }
-              } catch (caseInsensitiveError) {
-                console.error("Error during case-insensitive referral lookup:", caseInsensitiveError);
-              }
-            } else if (referrerData) {
-              const referrerId = referrerData.id;
-              const currentReferrals = referrerData.total_referrals || 0;
-              
-              console.log(`Found referrer. ID: ${referrerId}, Current referrals: ${currentReferrals}`);
-              
-              // Create referral record
-              const { error: referralRecordError } = await supabaseAdmin
-                .from("referrals")
-                .insert({
-                  referrer_id: referrerId,
-                  referred_id: userId,
-                  created_at: new Date().toISOString(),
-                });
-              
-              if (referralRecordError) {
-                console.error("Error creating referral record:", referralRecordError);
-              } else {
-                console.log("Referral record created successfully");
-                
-                // Update referrer's total_referrals count
-                const { error: updateError } = await supabaseAdmin
-                  .from("profiles")
-                  .update({ total_referrals: currentReferrals + 1 })
-                  .eq("id", referrerId);
-                
-                if (updateError) {
-                  console.error("Error updating referrer's total_referrals:", updateError);
-                } else {
-                  console.log(`Updated referrer's total_referrals to ${currentReferrals + 1}`);
-                  
-                  // Update referral_stats table if it exists
-                  try {
-                    // Check if the referral_stats table exists and has the referrer's record
-                    const { data: referrerStats, error: statsCheckError } = await supabaseAdmin
-                      .from("referral_stats")
-                      .select("*")
-                      .eq("user_id", referrerId)
-                      .single();
-                        
-                    if (!statsCheckError && referrerStats) {
-                      // Update the referral stats
-                      const { error: updateStatsError } = await supabaseAdmin
-                        .from("referral_stats")
-                        .update({
-                          referral_count: (referrerStats.referral_count || 0) + 1,
-                          total_referral_count: (referrerStats.total_referral_count || 0) + 1
-                        })
-                        .eq("user_id", referrerId);
-                          
-                      if (updateStatsError) {
-                        console.error("Error updating referral_stats:", updateStatsError);
-                      } else {
-                        console.log("Successfully updated referral_stats");
-                      }
-                    } else {
-                      // Create a new referral stats record if it doesn't exist
-                      const { error: createStatsError } = await supabaseAdmin
-                        .from("referral_stats")
-                        .insert({
-                          user_id: referrerId,
-                          referral_count: 1,
-                          total_referral_count: 1
-                        });
-                          
-                      if (createStatsError) {
-                        console.error("Error creating referral_stats:", createStatsError);
-                      } else {
-                        console.log("Successfully created referral_stats");
-                      }
-                    }
-                  } catch (statsError) {
-                    console.error("Exception handling referral_stats:", statsError);
-                    // Continue despite this error
-                  }
-                }
-              }
-            }
-          } catch (referralError) {
-            console.error("Error processing referral:", referralError);
-            // Continue with registration even if referral processing fails
-          }
-        }
-          
-        // Step 6: Update pioneer stats
-        // First, check if pioneer_stats_table has a record
-        const { data: existingStatsData, error: statsCheckError } = await supabaseAdmin
-          .from("pioneer_stats_table")
-          .select("*")
-          .single()
-
-        if (statsCheckError && statsCheckError.code !== "PGRST116") {
-          console.error("Error checking pioneer stats:", statsCheckError)
-        }
-
-        // If no record exists or there was an error, create/update the stats
-        if (!existingStatsData || statsCheckError) {
-          // Try to create a new record if none exists
-          const { error: insertStatsError } = await supabaseAdmin
-            .from("pioneer_stats_table")
-            .insert({
-              id: 1,
-              total_pioneers: 1,
-              genesis_pioneers: isGenesisPioneer ? 1 : 0
-            })
-            .onConflict("id")
-            .merge()
-
-          if (insertStatsError) {
-            console.error("Error creating pioneer stats:", insertStatsError)
-          }
-        } else {
-          // Update existing record
-          const { error: updateStatsError } = await supabaseAdmin
-            .from("pioneer_stats_table")
-            .update({
-              total_pioneers: existingStatsData.total_pioneers + 1,
-              genesis_pioneers: isGenesisPioneer 
-                ? existingStatsData.genesis_pioneers + 1 
-                : existingStatsData.genesis_pioneers
-            })
-            .eq("id", 1)
-
-          if (updateStatsError) {
-            console.error("Error updating pioneer stats:", updateStatsError)
-          }
-        }
-
-        return NextResponse.json(
-          {
-            message: "User created successfully",
-            pioneerNumber,
-            isGenesisPioneer
-          },
-          { status: 201 }
-        )
       } catch (error: any) {
         console.error("Registration error:", error)
         
