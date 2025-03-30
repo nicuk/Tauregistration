@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Shield, CheckCircle, Lock } from "lucide-react"
@@ -17,6 +17,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Declare types for Turnstile
+declare global {
+  interface Window {
+    turnstile: {
+      render: (
+        container: HTMLElement, 
+        options: {
+          sitekey: string;
+          callback: (token: string) => void;
+        }
+      ) => void;
+    };
+    onloadTurnstileCallback: () => void;
+  }
+}
 
 // Total Genesis Pioneer spots
 const TOTAL_GENESIS_SPOTS = 10000
@@ -45,6 +61,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
   const [totalUsers, setTotalUsers] = useState(0)
   const [spotsRemaining, setSpotsRemaining] = useState(TOTAL_GENESIS_SPOTS)
   const [percentageFilled, setPercentageFilled] = useState(0)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     async function fetchTotalUsers() {
@@ -75,6 +93,35 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
     fetchTotalUsers()
   }, [])
 
+  useEffect(() => {
+    // Load the Turnstile script
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback'
+    script.async = true
+    document.head.appendChild(script)
+
+    // Define the callback function
+    window.onloadTurnstileCallback = function() {
+      if (turnstileRef.current && window.turnstile) {
+        window.turnstile.render(turnstileRef.current, {
+          sitekey: '0x4AAAAAABDHCOQWCXDPCL60',
+          callback: function(token: string) {
+            setTurnstileToken(token)
+          },
+        })
+      }
+    }
+
+    return () => {
+      // Clean up
+      if (script.parentNode) {
+        script.parentNode.removeChild(script)
+      }
+      // Safely remove the callback
+      window.onloadTurnstileCallback = () => {};
+    }
+  }, [])
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -96,8 +143,14 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
         throw new Error("Password must be at least 6 characters long")
       }
 
+      // Check if Turnstile token exists
+      if (!turnstileToken) {
+        throw new Error("Please complete the security check")
+      }
+
       const sanitizedUsername = sanitizeInput(username)
       const sanitizedEmail = sanitizeInput(email)
+      const sanitizedReferralCode = sanitizeInput(referralCode)
 
       const response = await fetch("/api/register", {
         method: "POST",
@@ -111,7 +164,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
           isPiUser,
           country: sanitizeInput(country),
           referralSource: sanitizeInput(referralSource),
-          referralCode: sanitizeInput(referralCode),
+          referralCode: sanitizedReferralCode,
         }),
       })
 
@@ -279,7 +332,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
             </Alert>
           )}
 
-          <Button type="submit" className="w-full bg-indigo-700 hover:bg-indigo-800" disabled={loading}>
+          {/* Cloudflare Turnstile Widget */}
+          <div className="w-full flex justify-center my-4">
+            <div ref={turnstileRef} id="turnstile-widget"></div>
+          </div>
+
+          <Button type="submit" className="w-full bg-indigo-700 hover:bg-indigo-800" disabled={loading || !turnstileToken}>
             {loading ? "Processing..." : "Join TAUMine"}
           </Button>
         </form>
