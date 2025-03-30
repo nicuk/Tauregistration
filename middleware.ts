@@ -12,8 +12,18 @@ const BOT_PROTECTION = {
     // Amazon AWS IP ranges that were in your logs
     '3.234.208.',  // Partial match for 3.234.208.100
     '13.233.69.',  // Partial match for 13.233.69.58
+    '3.236.218.',  // Partial match for 3.236.218.223
+    '3.108.53.',   // Partial match for 3.108.53.242
     
     // Add more as needed based on your logs
+  ],
+  
+  // Block these regions completely
+  blockedRegions: [
+    {
+      country: 'IN',
+      region: 'Maharashtra'  // Maharashtra region in India
+    }
   ],
   
   // Rate limiting configuration
@@ -48,7 +58,23 @@ export async function middleware(req: NextRequest) {
   const ip = req.ip || req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
   const userAgent = req.headers.get('user-agent') || '';
   
-  // 1. Check for blocked user agents
+  // Get country and region information from Vercel headers if available
+  const country = req.headers.get('x-vercel-ip-country') || '';
+  const region = req.headers.get('x-vercel-ip-country-region') || '';
+  
+  // 1. Check for blocked regions
+  if (BOT_PROTECTION.blockedRegions.some(blockedRegion => 
+    blockedRegion.country === country && 
+    blockedRegion.region === region
+  )) {
+    console.log(`Blocked request from blocked region: ${country}, ${region}`);
+    return new NextResponse(JSON.stringify({ error: 'Access denied' }), { 
+      status: 403,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  // 2. Check for blocked user agents
   if (BOT_PROTECTION.blockedUserAgents.some(agent => userAgent.toLowerCase().includes(agent))) {
     console.log(`Blocked request from suspicious user agent: ${userAgent}`);
     return new NextResponse(JSON.stringify({ error: 'Access denied' }), { 
@@ -57,7 +83,7 @@ export async function middleware(req: NextRequest) {
     });
   }
   
-  // 2. Check for blocked IP ranges
+  // 3. Check for blocked IP ranges
   if (BOT_PROTECTION.blockedIpRanges.some(range => ip.startsWith(range))) {
     console.log(`Blocked request from suspicious IP: ${ip}`);
     return new NextResponse(JSON.stringify({ error: 'Access denied' }), { 
@@ -66,7 +92,7 @@ export async function middleware(req: NextRequest) {
     });
   }
   
-  // 3. Apply rate limiting
+  // 4. Apply rate limiting
   const rateLimit = BOT_PROTECTION.rateLimit;
   const now = Date.now();
   
