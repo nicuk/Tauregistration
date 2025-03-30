@@ -61,7 +61,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
   const [totalUsers, setTotalUsers] = useState(0)
   const [spotsRemaining, setSpotsRemaining] = useState(TOTAL_GENESIS_SPOTS)
   const [percentageFilled, setPercentageFilled] = useState(0)
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>("MAINTENANCE_MODE_BYPASS_TOKEN")
   const turnstileRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -94,38 +94,17 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
   }, [])
 
   useEffect(() => {
-    // Load the Turnstile script
-    const script = document.createElement('script')
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback'
-    script.async = true
-    document.head.appendChild(script)
-
-    // Define the callback function
-    window.onloadTurnstileCallback = function() {
-      if (turnstileRef.current && window.turnstile) {
-        window.turnstile.render(turnstileRef.current, {
-          sitekey: '0x4AAAAAABDHCOQWCXDPCL60',
-          callback: function(token: string) {
-            setTurnstileToken(token)
-          },
-        })
-      }
-    }
+    // Temporarily set a default token to bypass Turnstile during maintenance
+    setTurnstileToken("MAINTENANCE_MODE_BYPASS_TOKEN")
 
     return () => {
-      // Clean up
-      if (script.parentNode) {
-        script.parentNode.removeChild(script)
-      }
-      // Safely remove the callback
-      window.onloadTurnstileCallback = () => {};
     }
   }, [])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
+    setLoading(true)
 
     try {
       if (!email || !password || !username) {
@@ -141,11 +120,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
       // Client-side validation for password strength
       if (password.length < 6) {
         throw new Error("Password must be at least 6 characters long")
-      }
-
-      // Check if Turnstile token exists
-      if (!turnstileToken) {
-        throw new Error("Please complete the security check")
       }
 
       const sanitizedUsername = sanitizeInput(username)
@@ -332,12 +306,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
             </Alert>
           )}
 
-          {/* Cloudflare Turnstile Widget */}
-          <div className="w-full flex justify-center my-4">
-            <div ref={turnstileRef} id="turnstile-widget"></div>
+          {/* Cloudflare Turnstile Widget - Temporarily disabled for maintenance */}
+          <div className="mb-4">
+            <p className="text-sm text-gray-500">Security verification temporarily disabled for maintenance.</p>
           </div>
 
-          <Button type="submit" className="w-full bg-indigo-700 hover:bg-indigo-800" disabled={loading || !turnstileToken}>
+          <Button type="submit" className="w-full bg-indigo-700 hover:bg-indigo-800" disabled={loading}>
             {loading ? "Processing..." : "Join TAUMine"}
           </Button>
         </form>
