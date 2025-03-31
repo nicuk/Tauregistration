@@ -74,8 +74,8 @@ export function EmailVerificationBox({ email, onDismiss }: EmailVerificationBoxP
       }
 
       setMessage({ type: "success", text: "Verification email sent!" })
-      setCooldown(30)
-      localStorage.setItem("emailVerificationCooldown", (Date.now() + 30000).toString())
+      setCooldown(60)
+      localStorage.setItem("emailVerificationCooldown", (Date.now() + 60000).toString())
     } catch (error: any) {
       console.error("Error sending verification email:", error)
       setMessage({
@@ -139,4 +139,3 @@ export function EmailVerificationBox({ email, onDismiss }: EmailVerificationBoxP
 }
 
 export default EmailVerificationBox
-
