@@ -68,6 +68,31 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
     async function fetchTotalUsers() {
       try {
         setLoading(true)
+        
+        // First try to use the new API endpoint
+        try {
+          const response = await fetch('/api/pioneer-stats')
+          if (response.ok) {
+            const data = await response.json()
+            const userCount = data.total_pioneers || 0
+            setTotalUsers(userCount)
+            
+            // If we've exceeded 10,000, show the total instead of remaining
+            if (userCount >= TOTAL_GENESIS_SPOTS) {
+              setSpotsRemaining(userCount)
+              setPercentageFilled(100)
+            } else {
+              const remaining = Math.max(0, TOTAL_GENESIS_SPOTS - userCount)
+              setSpotsRemaining(remaining)
+              setPercentageFilled((userCount / TOTAL_GENESIS_SPOTS) * 100)
+            }
+            return
+          }
+        } catch (apiError) {
+          console.error("Error fetching from API:", apiError)
+        }
+        
+        // Fallback to the old method if API fails
         const { count, error } = await supabaseClient.from("profiles").select("*", { count: "exact", head: true })
 
         if (error) {
@@ -77,9 +102,16 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
 
         const userCount = count || 0
         setTotalUsers(userCount)
-        const remaining = Math.max(0, TOTAL_GENESIS_SPOTS - userCount)
-        setSpotsRemaining(remaining)
-        setPercentageFilled((userCount / TOTAL_GENESIS_SPOTS) * 100)
+        
+        // If we've exceeded 10,000, show the total instead of remaining
+        if (userCount >= TOTAL_GENESIS_SPOTS) {
+          setSpotsRemaining(userCount)
+          setPercentageFilled(100)
+        } else {
+          const remaining = Math.max(0, TOTAL_GENESIS_SPOTS - userCount)
+          setSpotsRemaining(remaining)
+          setPercentageFilled((userCount / TOTAL_GENESIS_SPOTS) * 100)
+        }
       } catch (error) {
         console.error("Error fetching user count:", error)
         setTotalUsers(0)
@@ -196,7 +228,10 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
           <div className="flex justify-between text-sm mb-1">
             <span>Genesis Pioneer spots</span>
             <span className="font-medium">
-              {formatNumber(spotsRemaining)}/{formatNumber(TOTAL_GENESIS_SPOTS)} remaining
+              {totalUsers >= TOTAL_GENESIS_SPOTS 
+                ? `${formatNumber(spotsRemaining)} total pioneers` 
+                : `${formatNumber(spotsRemaining)}/${formatNumber(TOTAL_GENESIS_SPOTS)} remaining`
+              }
             </span>
           </div>
           <Progress value={percentageFilled} className="h-2" />
