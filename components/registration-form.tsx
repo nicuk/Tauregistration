@@ -221,20 +221,28 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
         <div className="text-center">
           <h1 className="text-2xl font-bold">Join TAU Network as a Pioneer</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Be among the first 10,000 users to receive Genesis Pioneer status with exclusive rewards and benefits
+            {totalUsers >= TOTAL_GENESIS_SPOTS 
+              ? "All 10,000 Genesis Pioneer slots have been filled! Join our growing community of pioneers."
+              : "Be among the first 10,000 users to receive Genesis Pioneer status with exclusive rewards and benefits"
+            }
           </p>
         </div>
         <div className="w-full">
           <div className="flex justify-between text-sm mb-1">
-            <span>Genesis Pioneer spots</span>
+            <span>Pioneer status</span>
             <span className="font-medium">
               {totalUsers >= TOTAL_GENESIS_SPOTS 
-                ? `${formatNumber(spotsRemaining)} total pioneers` 
+                ? `${formatNumber(10000)}/${formatNumber(TOTAL_GENESIS_SPOTS)} Genesis Pioneers | +${formatNumber(totalUsers - TOTAL_GENESIS_SPOTS)} additional` 
                 : `${formatNumber(spotsRemaining)}/${formatNumber(TOTAL_GENESIS_SPOTS)} remaining`
               }
             </span>
           </div>
           <Progress value={percentageFilled} className="h-2" />
+          {totalUsers >= TOTAL_GENESIS_SPOTS && (
+            <p className="text-xs text-muted-foreground mt-1 text-right">
+              Join <span className="text-primary font-semibold">{formatNumber(totalUsers)}</span> pioneers and counting!
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent>
