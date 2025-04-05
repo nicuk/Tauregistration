@@ -2,136 +2,139 @@
 
 import { useState, useEffect } from "react"
 import { createClientSupabaseClient } from "@/lib/supabase-client"
+import { Card, CardHeader, CardTitle, CardContent, Badge, Progress } from "@/components/ui"
+import { Loader2, Users } from "lucide-react"
 
-export function GenesisPioneerCounter() {
-  const [stats, setStats] = useState({
-    total_pioneers: 0,
-    genesis_pioneers: 0,
-    max_genesis_pioneers: 10000,
-    additional_pioneers: 0
-  })
-  const [statusMessage, setStatusMessage] = useState("")
-  const [loading, setLoading] = useState(true)
-  const supabase = createClientSupabaseClient()
+export default function GenesisPioneerCounter() {
+  const [stats, setStats] = useState<PioneerStats | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const supabase = createClientSupabaseClient();
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // First try to get the formatted message
-        const { data: messageData, error: messageError } = await supabase.rpc('get_pioneer_status_message')
+        setLoading(true);
+        const { data: extendedStats, error: statsError } = await supabase.rpc('get_extended_pioneer_stats');
         
-        if (messageData && !messageError) {
-          setStatusMessage(messageData)
+        if (statsError) {
+          console.error('Error fetching extended pioneer stats:', statsError);
+          return;
         }
-        
-        // Try to use the new get_extended_pioneer_stats function
-        const { data, error } = await supabase.rpc('get_extended_pioneer_stats')
-        
-        if (data && !error) {
-          // New function successful
+
+        if (extendedStats && extendedStats.length > 0) {
           setStats({
-            total_pioneers: data.total_pioneers || 0,
-            genesis_pioneers: data.genesis_pioneers || 0,
-            max_genesis_pioneers: 10000,
-            additional_pioneers: Math.max(0, (data.total_registrations || 0) - 10000)
-          })
-        } else {
-          // Fallback to the old method if API fails
-          const { count } = await supabase.from("profiles").select("*", { count: "exact", head: true })
-          const { count: genesisCount } = await supabase.from("profiles")
-            .select("*", { count: "exact", head: true })
-            .lte("pioneer_number", 10000)
-          
-          setStats({
-            total_pioneers: count || 0,
-            genesis_pioneers: genesisCount || 0,
-            max_genesis_pioneers: 10000,
-            additional_pioneers: Math.max(0, (count || 0) - 10000)
-          })
+            genesisPioneers: extendedStats[0].genesis_pioneers,
+            totalPioneers: extendedStats[0].total_pioneers,
+            genesisPioneersFilled: extendedStats[0].genesis_slots_filled,
+            totalRegistrations: extendedStats[0].total_registrations
+          });
+        }
+
+        const { data: message, error: messageError } = await supabase.rpc('get_pioneer_status_message');
+        
+        if (messageError) {
+          console.error('Error fetching pioneer status message:', messageError);
+        } else if (message) {
+          setStatusMessage(message);
         }
       } catch (error) {
-        console.error("Error fetching pioneer stats:", error)
-        // Fallback to the old method if API fails
-        try {
-          const { count } = await supabase.from("profiles").select("*", { count: "exact", head: true })
-          const { count: genesisCount } = await supabase.from("profiles")
-            .select("*", { count: "exact", head: true })
-            .lte("pioneer_number", 10000)
-          
-          setStats({
-            total_pioneers: count || 0,
-            genesis_pioneers: genesisCount || 0,
-            max_genesis_pioneers: 10000,
-            additional_pioneers: Math.max(0, (count || 0) - 10000)
-          })
-        } catch (innerError) {
-          console.error("Error in fallback fetch:", innerError)
-        }
+        console.error('Error in fetching pioneer stats:', error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchStats()
+    fetchStats();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel("public:profiles")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => {
-        setStats((prev) => {
-          const newTotal = prev.total_pioneers + 1
-          return {
-            ...prev,
-            total_pioneers: newTotal,
-            additional_pioneers: Math.max(0, newTotal - 10000)
-          }
-        })
-        
-        // Update the status message when a new user joins
-        if (stats.genesis_pioneers >= 10000) {
-          setStatusMessage(`10,000/10,000 Genesis Pioneers! ${stats.additional_pioneers + 1} additional pioneers have joined since!`)
-        }
-      })
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [supabase])
-
-  // Format number with commas
-  const formatNumber = (num: number) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-  }
-
-  // If we have a status message from the backend, use it
-  if (statusMessage) {
+  if (loading) {
     return (
-      <div className="text-center">
-        <div className="font-bold">{statusMessage}</div>
+      <div className="flex justify-center items-center p-4">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
-  // All Genesis Pioneer slots are filled
-  if (stats.genesis_pioneers >= 10000) {
-    return (
-      <div className="text-center">
-        <div className="font-bold text-lg">
-          {formatNumber(10000)}/{formatNumber(stats.max_genesis_pioneers)} Genesis Pioneers
-        </div>
-        <div className="text-sm mt-1">
-          <span className="text-primary font-semibold">+{formatNumber(stats.additional_pioneers)}</span> additional pioneers have joined!
-        </div>
-      </div>
-    )
-  }
+  const additionalPioneers = stats?.totalRegistrations 
+    ? stats.totalRegistrations - 10000 
+    : 0;
 
-  // Some Genesis Pioneer slots still available (fallback, shouldn't happen anymore)
   return (
-    <div>
-      <span className="font-bold">{loading ? "..." : formatNumber(stats.genesis_pioneers)}</span> of{" "}
-      {formatNumber(stats.max_genesis_pioneers)} Genesis Pioneers
-    </div>
-  )
+    <Card className="overflow-hidden border-primary/20">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg font-bold flex items-center">
+            <Users className="h-5 w-5 mr-2 text-primary" />
+            Pioneer Stats
+          </CardTitle>
+          {stats?.genesisPioneersFilled === 10000 && (
+            <Badge variant="default" className="bg-gradient-to-r from-primary to-primary/80 animate-pulse">
+              Milestone Achieved!
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="pb-4">
+        {stats?.genesisPioneersFilled === 10000 ? (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 p-4 rounded-lg border border-primary/20">
+              <div className="flex justify-between items-center">
+                <div className="font-bold text-xl">
+                  <span className="text-primary">10,000</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-primary">10,000</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-lg mr-1">🎉</span>
+                  <span className="font-semibold">Genesis Pioneers</span>
+                </div>
+              </div>
+              
+              <div className="mt-3 flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">All Genesis slots filled!</div>
+                <div className="bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                  <span className="mr-1">+</span>
+                  {additionalPioneers}
+                  <span className="ml-1">additional</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-semibold text-primary">Total community:</span> {stats.totalRegistrations.toLocaleString()} pioneers
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Join the growing TAU Network community!
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span>Genesis Pioneers</span>
+              <span className="font-medium">
+                {stats?.genesisPioneers?.toLocaleString() || 0}/10,000
+              </span>
+            </div>
+            <Progress value={(stats?.genesisPioneers || 0) / 100} className="h-2" />
+            <p className="text-xs text-muted-foreground mt-1">
+              {statusMessage || `${10000 - (stats?.genesisPioneers || 0)} spots remaining`}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface PioneerStats {
+  genesisPioneers: number;
+  totalPioneers: number;
+  genesisPioneersFilled: number;
+  totalRegistrations: number;
 }

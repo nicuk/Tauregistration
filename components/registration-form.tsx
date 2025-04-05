@@ -227,21 +227,43 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ referralCode: initi
             }
           </p>
         </div>
-        <div className="w-full">
+        <div className="w-full mt-4">
           <div className="flex justify-between text-sm mb-1">
-            <span>Pioneer status</span>
-            <span className="font-medium">
-              {totalUsers >= TOTAL_GENESIS_SPOTS 
-                ? `${formatNumber(10000)}/${formatNumber(TOTAL_GENESIS_SPOTS)} Genesis Pioneers | +${formatNumber(totalUsers - TOTAL_GENESIS_SPOTS)} additional` 
-                : `${formatNumber(spotsRemaining)}/${formatNumber(TOTAL_GENESIS_SPOTS)} remaining`
-              }
-            </span>
+            <span className="font-semibold">Pioneer status</span>
+            {totalUsers >= TOTAL_GENESIS_SPOTS ? (
+              <span className="font-bold text-primary">
+                <span className="inline-flex items-center">
+                  <span className="mr-1">🎉</span> Milestone achieved!
+                </span>
+              </span>
+            ) : (
+              <span className="font-medium">
+                {formatNumber(spotsRemaining)}/{formatNumber(TOTAL_GENESIS_SPOTS)} remaining
+              </span>
+            )}
           </div>
-          <Progress value={percentageFilled} className="h-2" />
+          <div className="relative">
+            <Progress value={percentageFilled} className="h-3 rounded-md" />
+            {totalUsers >= TOTAL_GENESIS_SPOTS && (
+              <div className="absolute -right-1 -top-1 animate-pulse">
+                <span className="text-lg">🚀</span>
+              </div>
+            )}
+          </div>
           {totalUsers >= TOTAL_GENESIS_SPOTS && (
-            <p className="text-xs text-muted-foreground mt-1 text-right">
-              Join <span className="text-primary font-semibold">{formatNumber(totalUsers)}</span> pioneers and counting!
-            </p>
+            <div className="mt-3 bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 p-3 rounded-lg border border-primary/20">
+              <div className="flex justify-between items-center">
+                <div className="font-semibold">
+                  <span className="text-primary">10,000</span>/<span className="text-primary">10,000</span> Genesis Pioneers
+                </div>
+                <div className="bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
+                  +{formatNumber(totalUsers - TOTAL_GENESIS_SPOTS)} pioneers
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Join <span className="text-primary font-semibold">{formatNumber(totalUsers)}</span> pioneers and counting!
+              </p>
+            </div>
           )}
         </div>
       </CardHeader>
